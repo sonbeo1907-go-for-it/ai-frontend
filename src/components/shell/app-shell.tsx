@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
+  BrainCircuit,
   CalendarDays,
   Clock3,
   Files,
@@ -23,6 +24,7 @@ import { cn } from "@/lib/cn";
 const navigation = [
   { href: "/roadmaps", label: "Lộ trình", icon: BookOpen },
   { href: "/daily-plans", label: "Kế hoạch ngày", icon: CalendarDays },
+  { href: "/planning", label: "AI Planning", icon: BrainCircuit },
   { href: "/materials", label: "Tài liệu nguồn", icon: Files },
   { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/profile", label: "Hồ sơ", icon: Settings2 },
@@ -40,6 +42,10 @@ const pageMetadata: Record<string, { title: string; subtitle: string }> = {
   "/daily-plans": {
     title: "Kế hoạch ngày",
     subtitle: "Lập checklist rõ ràng và ghi nhận kết quả thực tế.",
+  },
+  "/planning": {
+    title: "AI Planning",
+    subtitle: "Quản lý lộ trình tổng thể và kế hoạch hàng ngày với sự hỗ trợ của AI.",
   },
   "/materials": {
     title: "Kho tài liệu nguồn",
