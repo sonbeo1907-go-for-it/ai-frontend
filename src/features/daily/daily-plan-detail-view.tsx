@@ -2,16 +2,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
   Circle,
   Clock3,
   CopyPlus,
+  Info,
   ListChecks,
   MoreHorizontal,
   Plus,
   SkipForward,
+  Sparkles,
   Timer,
   Trash2,
 } from "lucide-react";
@@ -25,6 +28,7 @@ import { PageLoading, ProgressBar } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import type {
+  AiAdjustmentAction,
   DailyPlan,
   DailyPlanItem,
   DailyPlanVersion,
@@ -32,6 +36,21 @@ import type {
   ProgressEntryStatus,
 } from "@/types/api";
 import { PomodoroModal } from "./pomodoro-modal";
+
+const getAdjustmentDisplay = (action: AiAdjustmentAction) => {
+  switch (action) {
+    case "CARRY_OVER":
+      return { label: "Chuyển từ hôm qua", tone: "amber" as const };
+    case "SPLIT":
+      return { label: "Đề xuất chia nhỏ", tone: "indigo" as const };
+    case "RESCHEDULE":
+      return { label: "Đề xuất dời lịch", tone: "sky" as const };
+    case "DROP":
+      return { label: "Gợi ý bỏ", tone: "rose" as const };
+    default:
+      return null;
+  }
+};
 
 export function DailyPlanDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -43,6 +62,8 @@ export function DailyPlanDetailView() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
   const [progressTarget, setProgressTarget] = useState<DailyPlanItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DailyPlanItem | null>(null);
   const [pomodoro, setPomodoro] = useState<{ open: boolean; taskId?: string }>({ open: false });
@@ -107,6 +128,31 @@ export function DailyPlanDetailView() {
       });
       setSelectedId(created.id);
     }, "Đã tạo phiên bản DRAFT mới; phiên bản ACTIVE chưa bị thay đổi.");
+  }
+  async function handleGenerateAiDraft() {
+    if (aiGenerating) return;
+    if (editable && items.length > 0 && ["MANUAL", "USER_EDITED"].includes(version?.origin ?? "")) {
+      setAiConfirmOpen(true);
+      return;
+    }
+    await executeGenerateAiDraft();
+  }
+  async function executeGenerateAiDraft() {
+    setAiConfirmOpen(false);
+    setAiGenerating(true);
+    try {
+      const created = await apiRequest<DailyPlanVersion>(
+        `/api/v1/daily-plans/${id}/versions/generate`,
+        { method: "POST" },
+      );
+      show("Đã sinh kế hoạch AI thành công.");
+      await load();
+      setSelectedId(created.id);
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+    } finally {
+      setAiGenerating(false);
+    }
   }
   async function activate() {
     if (!version) return;
@@ -194,6 +240,15 @@ export function DailyPlanDetailView() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={handleGenerateAiDraft}
+                loading={aiGenerating}
+                disabled={aiGenerating}
+                className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+              >
+                <Sparkles className="size-4" />
+                {aiGenerating ? "Đang sinh kế hoạch..." : "Sinh kế hoạch AI"}
+              </Button>
               {editable && (
                 <Button variant="secondary" onClick={() => setAddOpen(true)}>
                   <Plus className="size-4" />
@@ -272,6 +327,28 @@ export function DailyPlanDetailView() {
           </div>
         </Card>
         <div className="space-y-3">
+          {version?.requiresUserDecision && (
+            <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-amber-900 ring-1 ring-inset ring-amber-500/20">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+              <div>
+                <h4 className="font-bold text-amber-800">⚠ Kế hoạch cần bạn quyết định</h4>
+                <p className="mt-1 text-sm leading-relaxed">
+                  {(version.totalPlannedMinutes ?? 0) > (plan?.availableMinutes ?? 0)
+                    ? "Tổng thời gian do AI đề xuất vượt quá quỹ thời gian khả dụng của bạn. Vui lòng điều chỉnh hoặc xóa bớt các nhiệm vụ trước khi kích hoạt."
+                    : "AI có một số đề xuất thay đổi (chia nhỏ, dời lịch, hoặc bỏ bớt). Bạn hãy xem qua và điều chỉnh nếu cần trước khi kích hoạt."}
+                </p>
+              </div>
+            </div>
+          )}
+          {version?.aiExplanation && (
+            <div className="flex items-start gap-3 rounded-2xl bg-indigo-50/50 p-4 text-indigo-900 ring-1 ring-inset ring-indigo-500/20">
+              <Sparkles className="mt-0.5 size-5 shrink-0 text-indigo-600" />
+              <div>
+                <h4 className="font-bold text-indigo-800">✨ AI đề xuất</h4>
+                <p className="mt-1 text-sm leading-relaxed">{version.aiExplanation}</p>
+              </div>
+            </div>
+          )}
           {items.length === 0 ? (
             <Card className="grid min-h-72 place-items-center border-dashed p-8 text-center">
               <div>
@@ -361,6 +438,26 @@ export function DailyPlanDetailView() {
           </Button>
         </div>
       </Modal>
+      <Modal
+        open={aiConfirmOpen}
+        onClose={() => setAiConfirmOpen(false)}
+        title="Sinh lại bản nháp?"
+        description="Bản nháp hiện tại của bạn đã được chỉnh sửa và sẽ được lưu trữ lại. Bạn có chắc chắn muốn AI quét và sinh lại một bản nháp mới toanh không?"
+      >
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setAiConfirmOpen(false)}>
+            Hủy
+          </Button>
+          <Button
+            onClick={() => void executeGenerateAiDraft()}
+            loading={aiGenerating}
+            className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none"
+          >
+            <Sparkles className="size-4" />
+            Sinh bản mới
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -425,6 +522,12 @@ function TaskCard({
               {item.title}
             </h3>
             <Badge tone={status.tone}>{status.label}</Badge>
+            {item.aiAdjustmentAction && getAdjustmentDisplay(item.aiAdjustmentAction) && (
+              <Badge tone={getAdjustmentDisplay(item.aiAdjustmentAction)!.tone} title={item.aiAdjustmentReason || undefined}>
+                <Sparkles className="mr-1 inline-block size-3" />
+                {getAdjustmentDisplay(item.aiAdjustmentAction)!.label}
+              </Badge>
+            )}
           </div>
           {item.description && (
             <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>

@@ -10,6 +10,7 @@ export type DailyTaskCategory = "REVIEW" | "NEW_MATERIAL" | "PRACTICE" | "CUSTOM
 export type DailyTaskStatus =
   "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
 export type ProgressEntryStatus = "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
+export type AiAdjustmentAction = "CARRY_OVER" | "SPLIT" | "RESCHEDULE" | "DROP";
 
 export interface ApiResponse<T> {
   data: T;
@@ -125,6 +126,8 @@ export interface DailyPlanItem {
   completedAt?: string;
   createdAt: string;
   roadmapItemId?: string;
+  aiAdjustmentAction?: AiAdjustmentAction | null;
+  aiAdjustmentReason?: string | null;
 }
 export interface DailyPlanVersion {
   id: string;
@@ -137,6 +140,8 @@ export interface DailyPlanVersion {
   totalPlannedMinutes: number;
   activatedAt?: string;
   supersededAt?: string;
+  aiExplanation?: string | null;
+  requiresUserDecision?: boolean | null;
   items: DailyPlanItem[];
   createdAt: string;
   updatedAt: string;
