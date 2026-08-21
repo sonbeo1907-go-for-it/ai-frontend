@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Textarea } from "@/components/ui/field";
 import { PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
-import type { ProficiencyLevel, RoadmapOnboarding } from "@/types/api";
+import type { ProficiencyLevel, RoadmapOnboarding, RoadmapVersion } from "@/types/api";
 
 const levels: Array<{ value: ProficiencyLevel; label: string; detail: string }> = [
   { value: "BEGINNER", label: "Mới bắt đầu", detail: "Tôi chưa có nền tảng về chủ đề này." },
@@ -94,6 +94,24 @@ export function RoadmapOnboardingForm() {
       setSaving(false);
     }
   }
+  async function completeWithAi() {
+    if (!record) return;
+    setSaving(true);
+    setError("");
+    try {
+      await persist();
+      await apiRequest<RoadmapVersion>(
+        `/api/v1/roadmaps/${record.roadmapId}/generate-ai`,
+        { method: "POST" },
+      );
+      router.replace(`/roadmaps/${record.roadmapId}`);
+    } catch (nextError) {
+      setError(getErrorMessage(nextError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) return <PageLoading label="Đang chuẩn bị khảo sát lộ trình…" />;
   if (!record)
     return (
@@ -253,18 +271,29 @@ export function RoadmapOnboardingForm() {
               Tiếp theo <ArrowRight className="size-4" />
             </Button>
           ) : (
-            <Button
-              variant="success"
-              onClick={() => void complete()}
-              disabled={!ready}
-              loading={saving}
-            >
-              <Check className="size-4" />
-              Hoàn tất & tạo lộ trình
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => void complete()}
+                disabled={!ready}
+                loading={saving}
+              >
+                Tạo thủ công
+              </Button>
+              <Button
+                variant="success"
+                onClick={() => void completeWithAi()}
+                disabled={!ready}
+                loading={saving}
+              >
+                <Check className="size-4" />
+                Sinh Lộ trình bằng AI
+              </Button>
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 }
+
