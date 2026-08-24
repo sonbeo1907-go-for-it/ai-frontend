@@ -10,6 +10,10 @@ export type DailyTaskCategory = "REVIEW" | "NEW_MATERIAL" | "PRACTICE" | "CUSTOM
 export type DailyTaskStatus =
   "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
 export type ProgressEntryStatus = "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
+export type AiProviderProtocol = "OPENAI_COMPATIBLE";
+export type CredentialSelectionStrategy = "PRIORITY";
+export type AiPurpose =
+  "DOCUMENT_EXTRACTION" | "ROADMAP_GENERATION" | "DAILY_PLAN_GENERATION" | "DAILY_PLAN_REVIEW";
 
 export interface ApiResponse<T> {
   data: T;
@@ -158,4 +162,127 @@ export interface DailyPlan {
   createdAt: string;
   updatedAt: string;
   roadmapId?: string;
+}
+
+export interface AiProviderConfig {
+  id: string;
+  version: number;
+  providerId: string;
+  providerCode: string;
+  providerDisplayName: string;
+  protocol: AiProviderProtocol;
+  baseUrl: string;
+  purpose: AiPurpose;
+  model: string;
+  enabled: boolean;
+  defaultProvider: boolean;
+  timeoutSeconds: number;
+  maxInputTokens: number;
+  maxOutputTokens: number;
+  temperature: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAiProviderConfigInput {
+  providerId: string;
+  purpose: AiPurpose;
+  model: string;
+  enabled: boolean;
+  defaultProvider: boolean;
+  timeoutSeconds: number;
+  maxInputTokens: number;
+  maxOutputTokens: number;
+  temperature: number;
+}
+
+export interface UpdateAiProviderConfigInput {
+  version: number;
+  model: string;
+  timeoutSeconds: number;
+  maxInputTokens: number;
+  maxOutputTokens: number;
+  temperature: number;
+}
+
+export interface AiProviderConnectionTestResult {
+  configId: string;
+  providerId: string;
+  providerCode: string;
+  purpose: AiPurpose;
+  model: string;
+  credentialId?: string;
+  credentialLabel?: string;
+  success: boolean;
+  latencyMs: number;
+  failureCategory?: string;
+  message: string;
+  testedAt: string;
+}
+
+export interface AiProviderCredential {
+  id: string;
+  version: number;
+  providerId: string;
+  label: string;
+  secretRef: string;
+  priority: number;
+  enabled: boolean;
+  secretConfigured: boolean;
+  maskedSecret?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiProvider {
+  id: string;
+  version: number;
+  code: string;
+  displayName: string;
+  baseUrl: string;
+  protocol: AiProviderProtocol;
+  credentialStrategy: CredentialSelectionStrategy;
+  enabled: boolean;
+  credentials: AiProviderCredential[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InitialAiProviderCredentialInput {
+  label: string;
+  secretRef: string;
+  priority: number;
+  enabled: boolean;
+}
+
+export interface CreateAiProviderInput {
+  code: string;
+  displayName: string;
+  baseUrl: string;
+  protocol: AiProviderProtocol;
+  credentialStrategy: CredentialSelectionStrategy;
+  enabled: boolean;
+  initialCredential?: InitialAiProviderCredentialInput;
+}
+
+export interface UpdateAiProviderInput {
+  version: number;
+  displayName: string;
+  baseUrl: string;
+  protocol: AiProviderProtocol;
+  credentialStrategy: CredentialSelectionStrategy;
+}
+
+export interface CreateAiProviderCredentialInput {
+  label: string;
+  secretRef: string;
+  priority: number;
+  enabled: boolean;
+}
+
+export interface UpdateAiProviderCredentialInput {
+  version: number;
+  label: string;
+  secretRef: string;
+  priority: number;
 }
