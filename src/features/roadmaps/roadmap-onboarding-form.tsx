@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Field, Textarea } from "@/components/ui/field";
 import { PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
-import type { ProficiencyLevel, RoadmapOnboarding } from "@/types/api";
+import type { ProficiencyLevel, RoadmapOnboarding, RoadmapVersion } from "@/types/api";
+import {
+  RoadmapAiGenerationModal,
+  type RoadmapAiGenerationInput,
+} from "./roadmap-ai-generation-modal";
 
 const levels: Array<{ value: ProficiencyLevel; label: string; detail: string }> = [
   { value: "BEGINNER", label: "Mới bắt đầu", detail: "Tôi chưa có nền tảng về chủ đề này." },
@@ -31,6 +35,8 @@ export function RoadmapOnboardingForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiError, setAiError] = useState("");
   useEffect(() => {
     void apiRequest<RoadmapOnboarding>("/api/v1/roadmap-onboarding", { method: "POST" })
       .then((data) => {
@@ -94,6 +100,32 @@ export function RoadmapOnboardingForm() {
       setSaving(false);
     }
   }
+  async function completeWithAi(input: RoadmapAiGenerationInput) {
+    if (!record) return;
+
+    setSaving(true);
+    setError("");
+    setAiError("");
+
+    try {
+      await persist();
+      await apiRequest<RoadmapOnboarding>(
+        `/api/v1/roadmap-onboarding/${record.roadmapId}/complete`,
+        { method: "POST" },
+      );
+      await apiRequest<RoadmapVersion>(`/api/v1/roadmaps/${record.roadmapId}/generate-ai`, {
+        method: "POST",
+        body: JSON.stringify({ materialIds: input.materialIds }),
+      });
+      setAiOpen(false);
+      router.replace(`/roadmaps/${record.roadmapId}`);
+    } catch (nextError) {
+      setAiError(getErrorMessage(nextError));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) return <PageLoading label="Đang chuẩn bị khảo sát lộ trình…" />;
   if (!record)
     return (
@@ -253,18 +285,44 @@ export function RoadmapOnboardingForm() {
               Tiếp theo <ArrowRight className="size-4" />
             </Button>
           ) : (
-            <Button
-              variant="success"
-              onClick={() => void complete()}
-              disabled={!ready}
-              loading={saving}
-            >
-              <Check className="size-4" />
-              Hoàn tất & tạo lộ trình
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => void complete()}
+                disabled={!ready}
+                loading={saving}
+              >
+                Tạo thủ công
+              </Button>
+              <Button
+                variant="success"
+                onClick={() => {
+                  setAiError("");
+                  setAiOpen(true);
+                }}
+                disabled={!ready}
+                loading={saving}
+              >
+                <Check className="size-4" />
+                Sinh Lộ trình bằng AI
+              </Button>
+            </div>
           )}
         </div>
       </div>
+      {aiOpen && (
+        <RoadmapAiGenerationModal
+          mode="generate"
+          busy={saving}
+          submissionError={aiError}
+          onClose={() => {
+            if (saving) return;
+            setAiError("");
+            setAiOpen(false);
+          }}
+          onSubmit={(input) => void completeWithAi(input)}
+        />
+      )}
     </div>
   );
 }

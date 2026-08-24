@@ -13,6 +13,7 @@ import {
   Flag,
   Layers3,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useToast } from "@/components/providers/toast-provider";
@@ -25,6 +26,10 @@ import { PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import type { Roadmap, RoadmapItem, RoadmapVersion } from "@/types/api";
+import {
+  RoadmapAiGenerationModal,
+  type RoadmapAiGenerationInput,
+} from "./roadmap-ai-generation-modal";
 
 export function RoadmapDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -35,6 +40,8 @@ export function RoadmapDetailView() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [milestoneOpen, setMilestoneOpen] = useState(false);
+  const [aiMode, setAiMode] = useState<"generate" | "regenerate" | null>(null);
+  const [aiError, setAiError] = useState("");
   const [topicParent, setTopicParent] = useState<RoadmapItem | null>(null);
   const [editTarget, setEditTarget] = useState<RoadmapItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RoadmapItem | null>(null);
@@ -96,6 +103,48 @@ export function RoadmapDetailView() {
         : "Đã tạo phiên bản nội dung đầu tiên.",
     );
   }
+  function openAiModal(mode: "generate" | "regenerate") {
+    setAiError("");
+    setAiMode(mode);
+  }
+  function closeAiModal() {
+    if (busy) return;
+    setAiError("");
+    setAiMode(null);
+  }
+  async function submitAi(input: RoadmapAiGenerationInput) {
+    if (!aiMode) return;
+
+    setBusy(true);
+    setAiError("");
+
+    try {
+      const generatingInitialVersion = aiMode === "generate";
+      const path = generatingInitialVersion
+        ? `/api/v1/roadmaps/${id}/generate-ai`
+        : `/api/v1/roadmaps/${id}/regenerate-ai`;
+      const body = generatingInitialVersion
+        ? { materialIds: input.materialIds }
+        : { adjustmentPrompt: input.adjustmentPrompt };
+      const created = await apiRequest<RoadmapVersion>(path, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+
+      setSelectedId(created.id);
+      setAiMode(null);
+      show(
+        generatingInitialVersion
+          ? `AI đã tạo Version ${created.versionNumber} ở trạng thái DRAFT.`
+          : `AI đã tái tạo Version ${created.versionNumber} và giữ lại lịch sử cũ.`,
+      );
+      await load();
+    } catch (error) {
+      setAiError(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function activate() {
     if (!version) return;
     await action(
@@ -156,6 +205,12 @@ export function RoadmapDetailView() {
             </div>
             <div className="flex flex-wrap gap-2">
               {editable && (
+                <Button variant="secondary" onClick={() => openAiModal("regenerate")}>
+                  <Sparkles className="size-4 text-indigo-600" />
+                  Tái tạo bằng AI
+                </Button>
+              )}
+              {editable && (
                 <Button variant="secondary" onClick={() => setMilestoneOpen(true)}>
                   <Plus className="size-4" />
                   Cột mốc
@@ -173,10 +228,20 @@ export function RoadmapDetailView() {
                 </Button>
               )}
               {!editable && (
-                <Button onClick={() => void createVersion()} loading={busy}>
-                  <CopyPlus className="size-4" />
-                  {roadmap.versions.length ? "Tạo bản chỉnh sửa" : "Tạo Version 1"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="success"
+                    onClick={() => openAiModal(roadmap.versions.length ? "regenerate" : "generate")}
+                    loading={busy}
+                  >
+                    <Sparkles className="size-4" />
+                    {roadmap.versions.length ? "Tái tạo bằng AI" : "Sinh bằng AI"}
+                  </Button>
+                  <Button variant="secondary" onClick={() => void createVersion()} loading={busy}>
+                    <CopyPlus className="size-4" />
+                    {roadmap.versions.length ? "Tạo bản chỉnh sửa" : "Tạo thủ công"}
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -223,7 +288,7 @@ export function RoadmapDetailView() {
               ))
             ) : (
               <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-500">
-                Chưa có phiên bản nội dung. Hãy tạo Version 1 để bắt đầu xây dựng.
+                Chưa có phiên bản nội dung. Hãy sinh bằng AI hoặc tạo Version 1 thủ công để bắt đầu.
               </p>
             )}
           </div>
@@ -243,16 +308,33 @@ export function RoadmapDetailView() {
                 <CirclePlus className="mx-auto size-10 text-indigo-400" />
                 <h3 className="mt-4 font-black">Bắt đầu cấu trúc lộ trình</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Tạo phiên bản nội dung đầu tiên để thêm cột mốc.
+                  Dùng AI để tự động phân rã mục tiêu hoặc tạo phiên bản thủ công.
                 </p>
-                <Button className="mt-5" onClick={() => void createVersion()} loading={busy}>
-                  Tạo Version 1
-                </Button>
+                <div className="mt-5 flex flex-wrap justify-center gap-3">
+                  <Button variant="success" onClick={() => openAiModal("generate")} loading={busy}>
+                    <Sparkles className="size-4" />
+                    Sinh bằng AI
+                  </Button>
+                  <Button variant="secondary" onClick={() => void createVersion()} loading={busy}>
+                    Tạo Version 1 thủ công
+                  </Button>
+                </div>
               </div>
             </Card>
           )}
         </div>
       </div>
+
+      {aiMode && (
+        <RoadmapAiGenerationModal
+          mode={aiMode}
+          busy={busy}
+          submissionError={aiError}
+          onClose={closeAiModal}
+          onSubmit={(input) => void submitAi(input)}
+        />
+      )}
+
       {version && (
         <ItemModal
           open={milestoneOpen}

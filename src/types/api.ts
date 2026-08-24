@@ -78,7 +78,7 @@ export interface RoadmapVersion {
   entityVersion: number;
   versionNumber: number;
   status: VersionStatus;
-  origin: "MANUAL" | "USER_EDITED";
+  origin: "MANUAL" | "USER_EDITED" | "AI_GENERATED" | "AI_REGENERATED";
   activatedAt?: string;
   milestones: RoadmapItem[];
   createdAt: string;
