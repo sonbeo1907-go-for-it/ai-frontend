@@ -127,9 +127,6 @@ export function ProviderCard({
         <div className="flex items-center justify-between gap-3">
           <div>
             <h4 className="text-sm font-black text-slate-900">Credentials</h4>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Chỉ lưu secret reference; priority cao được thử trước.
-            </p>
           </div>
           <Button variant="secondary" size="sm" onClick={onAddCredential}>
             <Plus className="size-4" /> Thêm credential

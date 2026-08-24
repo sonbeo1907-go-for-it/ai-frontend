@@ -298,16 +298,6 @@ export function AiProviderConfigForm({
           </div>
         )}
 
-        {mustBeDefault && (
-          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
-            <p className="font-bold">Cấu hình mặc định bắt buộc</p>
-            <p className="mt-1 text-xs leading-5 text-indigo-700">
-              Đây là cấu hình hoạt động đầu tiên cho mục đích này, nên hệ thống sẽ đặt nó làm mặc
-              định.
-            </p>
-          </div>
-        )}
-
         {error && (
           <div
             role="alert"

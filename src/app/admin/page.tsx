@@ -49,7 +49,7 @@ export default function AdminPage() {
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <section className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <section className="mb-8">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-sm font-bold text-indigo-600">
               <ShieldCheck className="size-4" />
@@ -59,12 +59,8 @@ export default function AdminPage() {
               Quản trị cấu hình AI
             </h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Quản lý provider, model và giới hạn vận hành theo từng mục đích. ADMIN không có quyền
-              truy cập hồ sơ, tài liệu, lộ trình hoặc kế hoạch học tập cá nhân.
+              Quản lý provider, credential và model theo từng mục đích AI.
             </p>
-          </div>
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
-            Secrets nằm ngoài business database
           </div>
         </section>
 

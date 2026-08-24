@@ -394,7 +394,7 @@ export function AiProviderDashboard() {
         setConfigs((current) => current.filter((config) => config.id !== target.config.id));
       }
       setArchiveTarget(null);
-      show("Đã lưu trữ. Các tham chiếu lịch sử vẫn được bảo toàn.");
+      show("Đã lưu trữ.");
     } catch (error) {
       await handleActionError(error);
     } finally {
@@ -447,7 +447,7 @@ export function AiProviderDashboard() {
           <p className="mt-2 text-3xl font-black text-slate-950">
             {summary.readyPurposes}/{AI_PURPOSES.length}
           </p>
-          <p className="mt-1 text-xs text-slate-500">không tự động provider failover</p>
+          <p className="mt-1 text-xs text-slate-500">purpose có cấu hình sẵn sàng</p>
         </Card>
       </section>
 
@@ -576,9 +576,6 @@ export function AiProviderDashboard() {
                 <Sparkles className="size-4" /> Purpose routing
               </div>
               <h2 className="mt-2 text-xl font-black text-slate-950">Model configurations</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Mỗi purpose có tối đa một configuration mặc định đang hoạt động.
-              </p>
             </div>
             <Button onClick={() => openConfigCreate()} disabled={summary.enabledProviders === 0}>
               <Plus className="size-4" /> Thêm configuration
@@ -704,7 +701,6 @@ export function AiProviderDashboard() {
         open={archiveTarget !== null}
         onClose={() => setArchiveTarget(null)}
         title="Lưu trữ tài nguyên?"
-        description="Đây là soft archive; dữ liệu đã được tham chiếu không bị xóa cứng."
       >
         {archiveTarget && (
           <div className="grid gap-5">
@@ -736,7 +732,6 @@ export function AiProviderDashboard() {
         open={testResult !== null}
         onClose={() => setTestResult(null)}
         title="Kết quả kiểm tra kết nối"
-        description="Chỉ trạng thái và độ trễ được hiển thị; provider response content đã bị loại bỏ."
       >
         {testResult && (
           <div className="grid gap-5">

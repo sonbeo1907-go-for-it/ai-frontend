@@ -82,7 +82,6 @@ export function AiProviderCredentialForm({
       open
       onClose={saving ? () => undefined : onClose}
       title={credential ? "Chỉnh sửa Credential" : `Thêm Credential cho ${provider.displayName}`}
-      description="Priority chọn số lớn nhất trước; hệ thống không failover sang provider khác."
     >
       <form onSubmit={submit} className="grid gap-5">
         <Field label="Tên credential">
@@ -97,10 +96,7 @@ export function AiProviderCredentialForm({
           <div className="flex items-start gap-3">
             <KeyRound className="mt-0.5 size-5 shrink-0 text-indigo-600" />
             <div className="min-w-0 flex-1">
-              <Field
-                label="Secret reference"
-                hint="Chỉ lưu vị trí của secret. Không nhập API key plaintext."
-              >
+              <Field label="Secret reference" hint="Định dạng: env:VARIABLE_NAME">
                 <Input
                   value={secretRef}
                   maxLength={150}

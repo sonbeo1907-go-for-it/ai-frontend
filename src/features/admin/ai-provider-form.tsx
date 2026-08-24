@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { KeyRound, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
@@ -245,7 +244,7 @@ export function AiProviderForm({
                     placeholder="Primary"
                   />
                 </Field>
-                <Field label="Secret reference" hint="Không nhập API key thực tế.">
+                <Field label="Secret reference" hint="Định dạng: env:VARIABLE_NAME">
                   <Input
                     value={form.secretRef}
                     maxLength={150}
@@ -298,20 +297,13 @@ export function AiProviderForm({
           </div>
         )}
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <ShieldCheck className="size-4 text-emerald-600" />
-            <KeyRound className="size-4 text-indigo-600" />
-            Raw API key không đi qua business API.
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-              Hủy
-            </Button>
-            <Button type="submit" loading={saving}>
-              {editing ? "Lưu thay đổi" : "Thêm Provider"}
-            </Button>
-          </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-5">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+            Hủy
+          </Button>
+          <Button type="submit" loading={saving}>
+            {editing ? "Lưu thay đổi" : "Thêm Provider"}
+          </Button>
         </div>
       </form>
     </Modal>
