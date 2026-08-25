@@ -14,6 +14,7 @@ export type AiProviderProtocol = "OPENAI_COMPATIBLE";
 export type CredentialSelectionStrategy = "PRIORITY";
 export type AiPurpose =
   "DOCUMENT_EXTRACTION" | "ROADMAP_GENERATION" | "DAILY_PLAN_GENERATION" | "DAILY_PLAN_REVIEW";
+export type AiAdjustmentAction = "CARRY_OVER" | "SPLIT" | "RESCHEDULE" | "DROP";
 
 export interface ApiResponse<T> {
   data: T;
@@ -129,6 +130,8 @@ export interface DailyPlanItem {
   completedAt?: string;
   createdAt: string;
   roadmapItemId?: string;
+  aiAdjustmentAction?: AiAdjustmentAction | null;
+  aiAdjustmentReason?: string | null;
 }
 export interface DailyPlanVersion {
   id: string;
@@ -141,6 +144,8 @@ export interface DailyPlanVersion {
   totalPlannedMinutes: number;
   activatedAt?: string;
   supersededAt?: string;
+  aiExplanation?: string | null;
+  requiresUserDecision?: boolean | null;
   items: DailyPlanItem[];
   createdAt: string;
   updatedAt: string;

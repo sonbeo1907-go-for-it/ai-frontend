@@ -2,16 +2,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
   Circle,
   Clock3,
   CopyPlus,
+  Info,
   ListChecks,
   MoreHorizontal,
   Plus,
   SkipForward,
+  Sparkles,
   Timer,
   Trash2,
 } from "lucide-react";
@@ -25,6 +28,7 @@ import { PageLoading, ProgressBar } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import type {
+  AiAdjustmentAction,
   DailyPlan,
   DailyPlanItem,
   DailyPlanVersion,
@@ -32,6 +36,21 @@ import type {
   ProgressEntryStatus,
 } from "@/types/api";
 import { PomodoroModal } from "./pomodoro-modal";
+
+const getAdjustmentDisplay = (action: AiAdjustmentAction) => {
+  switch (action) {
+    case "CARRY_OVER":
+      return { label: "Chuyển từ hôm qua", tone: "amber" as const };
+    case "SPLIT":
+      return { label: "Đề xuất chia nhỏ", tone: "indigo" as const };
+    case "RESCHEDULE":
+      return { label: "Đề xuất dời lịch", tone: "sky" as const };
+    case "DROP":
+      return { label: "Gợi ý bỏ", tone: "rose" as const };
+    default:
+      return null;
+  }
+};
 
 export function DailyPlanDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -43,6 +62,9 @@ export function DailyPlanDetailView() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
+  const [activationConfirmOpen, setActivationConfirmOpen] = useState(false);
   const [progressTarget, setProgressTarget] = useState<DailyPlanItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DailyPlanItem | null>(null);
   const [pomodoro, setPomodoro] = useState<{ open: boolean; taskId?: string }>({ open: false });
@@ -78,9 +100,24 @@ export function DailyPlanDetailView() {
     () => versions.find((item) => item.id === selectedId) ?? null,
     [versions, selectedId],
   );
+  const currentDraft = useMemo(
+    () => versions.find((item) => item.status === "DRAFT") ?? null,
+    [versions],
+  );
   const editable = version?.status === "DRAFT";
   const executable =
     version?.status === "ACTIVE" && plan && ["READY", "IN_PROGRESS"].includes(plan.status);
+  const aiGenerationUnavailableReason = useMemo(() => {
+    if (!plan) return null;
+    if (!["DRAFT", "READY"].includes(plan.status)) {
+      return "Chỉ có thể sinh kế hoạch AI trước khi kế hoạch bắt đầu được thực hiện.";
+    }
+    if (!plan.roadmapId) {
+      return "Kế hoạch ngày cần được liên kết với một lộ trình ACTIVE trước khi AI có thể tạo nhiệm vụ.";
+    }
+    return null;
+  }, [plan]);
+  const canGenerateAi = !aiGenerationUnavailableReason;
   const items = version?.items ?? [];
   const earned = items.reduce(
     (sum, item) =>
@@ -108,8 +145,47 @@ export function DailyPlanDetailView() {
       setSelectedId(created.id);
     }, "Đã tạo phiên bản DRAFT mới; phiên bản ACTIVE chưa bị thay đổi.");
   }
-  async function activate() {
+  async function handleGenerateAiDraft() {
+    if (aiGenerating || !canGenerateAi) return;
+    if (currentDraft && currentDraft.items.length > 0) {
+      setAiConfirmOpen(true);
+      return;
+    }
+    await executeGenerateAiDraft();
+  }
+  async function executeGenerateAiDraft() {
+    setAiConfirmOpen(false);
+    setAiGenerating(true);
+    try {
+      const created = await apiRequest<DailyPlanVersion>(
+        `/api/v1/daily-plans/${id}/versions/generate`,
+        {
+          method: "POST",
+          headers: {
+            "Idempotency-Key": crypto.randomUUID(),
+          },
+        },
+      );
+      show("Đã sinh kế hoạch AI thành công.");
+      await load();
+      setSelectedId(created.id);
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+  async function handleActivate() {
     if (!version) return;
+    if (version.requiresUserDecision) {
+      setActivationConfirmOpen(true);
+      return;
+    }
+    await executeActivate();
+  }
+  async function executeActivate() {
+    if (!version) return;
+    setActivationConfirmOpen(false);
     await action(
       () =>
         apiRequest<DailyPlan>(`/api/v1/daily-plans/${id}/versions/${version.id}/activate`, {
@@ -194,6 +270,19 @@ export function DailyPlanDetailView() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => void handleGenerateAiDraft()}
+                loading={aiGenerating}
+                disabled={aiGenerating || !canGenerateAi}
+                className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+              >
+                <Sparkles className="size-4" />
+                {aiGenerating
+                  ? "Đang sinh kế hoạch..."
+                  : currentDraft
+                    ? "Sinh lại kế hoạch AI"
+                    : "Sinh kế hoạch AI"}
+              </Button>
               {editable && (
                 <Button variant="secondary" onClick={() => setAddOpen(true)}>
                   <Plus className="size-4" />
@@ -203,7 +292,7 @@ export function DailyPlanDetailView() {
               {editable && (
                 <Button
                   variant="success"
-                  onClick={() => void activate()}
+                  onClick={() => void handleActivate()}
                   loading={busy}
                   disabled={items.length === 0}
                 >
@@ -225,6 +314,12 @@ export function DailyPlanDetailView() {
               )}
             </div>
           </div>
+          {aiGenerationUnavailableReason && (
+            <div className="mt-5 flex items-start gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-inset ring-slate-200">
+              <Info className="mt-0.5 size-4 shrink-0 text-slate-400" />
+              <p>{aiGenerationUnavailableReason}</p>
+            </div>
+          )}
           <div className="mt-7 grid gap-4 sm:grid-cols-3">
             <Metric label="Tiến độ" value={`${completion}%`}>
               <ProgressBar value={completion} />
@@ -272,6 +367,28 @@ export function DailyPlanDetailView() {
           </div>
         </Card>
         <div className="space-y-3">
+          {version?.requiresUserDecision && (
+            <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-amber-900 ring-1 ring-inset ring-amber-500/20">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+              <div>
+                <h4 className="font-bold text-amber-800">⚠ Kế hoạch cần bạn quyết định</h4>
+                <p className="mt-1 text-sm leading-relaxed">
+                  Kế hoạch đã nằm trong quỹ thời gian, nhưng AI có đề xuất chuyển tiếp, chia nhỏ,
+                  dời lịch hoặc bỏ bớt nhiệm vụ. Hãy xem giải thích và chỉnh sửa nếu cần trước khi
+                  kích hoạt.
+                </p>
+              </div>
+            </div>
+          )}
+          {version?.aiExplanation && (
+            <div className="flex items-start gap-3 rounded-2xl bg-indigo-50/50 p-4 text-indigo-900 ring-1 ring-inset ring-indigo-500/20">
+              <Sparkles className="mt-0.5 size-5 shrink-0 text-indigo-600" />
+              <div>
+                <h4 className="font-bold text-indigo-800">✨ AI đề xuất</h4>
+                <p className="mt-1 text-sm leading-relaxed">{version.aiExplanation}</p>
+              </div>
+            </div>
+          )}
           {items.length === 0 ? (
             <Card className="grid min-h-72 place-items-center border-dashed p-8 text-center">
               <div>
@@ -361,6 +478,42 @@ export function DailyPlanDetailView() {
           </Button>
         </div>
       </Modal>
+      <Modal
+        open={aiConfirmOpen}
+        onClose={() => setAiConfirmOpen(false)}
+        title="Sinh lại bản nháp?"
+        description="Bản DRAFT hiện tại sẽ được giữ trong lịch sử ở trạng thái SUPERSEDED. AI sẽ tạo một phiên bản DRAFT mới và không ghi đè nội dung cũ."
+      >
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setAiConfirmOpen(false)}>
+            Hủy
+          </Button>
+          <Button
+            onClick={() => void executeGenerateAiDraft()}
+            loading={aiGenerating}
+            className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none"
+          >
+            <Sparkles className="size-4" />
+            Sinh bản mới
+          </Button>
+        </div>
+      </Modal>
+      <Modal
+        open={activationConfirmOpen}
+        onClose={() => setActivationConfirmOpen(false)}
+        title="Xác nhận các đề xuất của AI?"
+        description="Phiên bản này có đề xuất cần bạn xem xét. Khi kích hoạt, bạn xác nhận sử dụng nội dung hiện tại; các đề xuất bị dời hoặc bỏ không được tự động thêm lại."
+      >
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setActivationConfirmOpen(false)}>
+            Xem lại
+          </Button>
+          <Button variant="success" loading={busy} onClick={() => void executeActivate()}>
+            <CheckCircle2 className="size-4" />
+            Xác nhận và kích hoạt
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -409,6 +562,7 @@ function TaskCard({
     SKIPPED: { label: "Đã bỏ qua", tone: "rose" as const, icon: SkipForward },
   }[item.status];
   const Icon = status.icon;
+  const adjustment = item.aiAdjustmentAction ? getAdjustmentDisplay(item.aiAdjustmentAction) : null;
   return (
     <Card className={`p-4 sm:p-5 ${item.status === "COMPLETED" ? "bg-emerald-50/30" : ""}`}>
       <div className="flex items-start gap-3">
@@ -425,9 +579,21 @@ function TaskCard({
               {item.title}
             </h3>
             <Badge tone={status.tone}>{status.label}</Badge>
+            {adjustment && (
+              <Badge tone={adjustment.tone}>
+                <Sparkles className="mr-1 inline-block size-3" />
+                {adjustment.label}
+              </Badge>
+            )}
           </div>
           {item.description && (
             <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
+          )}
+          {adjustment && item.aiAdjustmentReason && (
+            <div className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-slate-600">
+              <Info className="mt-0.5 size-3.5 shrink-0 text-indigo-500" />
+              <span>{item.aiAdjustmentReason}</span>
+            </div>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-400">
             <span className="flex items-center gap-1">
