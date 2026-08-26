@@ -30,6 +30,8 @@ import {
   RoadmapAiGenerationModal,
   type RoadmapAiGenerationInput,
 } from "./roadmap-ai-generation-modal";
+import { RoadmapAiExecutionStatus } from "./roadmap-ai-execution-status";
+import { useRoadmapAiExecution } from "./use-roadmap-ai-execution";
 
 export function RoadmapDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -69,11 +71,35 @@ export function RoadmapDetailView() {
     const id = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(id);
   }, [load]);
+  const handleAiSucceeded = useCallback(
+    async (resultId: string, execution: { operation: "GENERATE" | "REGENERATE" }) => {
+      await load();
+      setSelectedId(resultId);
+      show(
+        execution.operation === "REGENERATE"
+          ? "AI đã tạo phiên bản DRAFT mới và giữ lại lịch sử cũ."
+          : "AI đã tạo bản DRAFT của lộ trình.",
+      );
+    },
+    [load, show],
+  );
+  const {
+    execution: aiExecution,
+    recovering: aiRecovering,
+    submitting: aiSubmitting,
+    pollingError: aiPollingError,
+    active: aiActive,
+    generate: generateWithAi,
+    regenerate: regenerateWithAi,
+    dismissFailure: dismissAiFailure,
+  } = useRoadmapAiExecution(id, handleAiSucceeded);
   const version = useMemo(
     () => roadmap?.versions.find((item) => item.id === selectedId) ?? null,
     [roadmap, selectedId],
   );
-  const editable = version?.status === "DRAFT";
+  const aiBlockingMutations = aiRecovering || aiActive;
+  const draftVersionSelected = version?.status === "DRAFT";
+  const editable = draftVersionSelected && !aiBlockingMutations;
   const complete = Boolean(
     version?.milestones.length &&
     version.milestones.every((milestone) => milestone.topics.length > 0),
@@ -108,41 +134,29 @@ export function RoadmapDetailView() {
     setAiMode(mode);
   }
   function closeAiModal() {
-    if (busy) return;
+    if (aiSubmitting) return;
     setAiError("");
     setAiMode(null);
   }
   async function submitAi(input: RoadmapAiGenerationInput) {
     if (!aiMode) return;
 
-    setBusy(true);
     setAiError("");
 
     try {
       const generatingInitialVersion = aiMode === "generate";
-      const path = generatingInitialVersion
-        ? `/api/v1/roadmaps/${id}/generate-ai`
-        : `/api/v1/roadmaps/${id}/regenerate-ai`;
-      const body = generatingInitialVersion
-        ? { materialIds: input.materialIds }
-        : { adjustmentPrompt: input.adjustmentPrompt };
-      const created = await apiRequest<RoadmapVersion>(path, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
+      const acceptedExecution = generatingInitialVersion
+        ? await generateWithAi(input.materialIds)
+        : await regenerateWithAi(input.adjustmentPrompt);
 
-      setSelectedId(created.id);
       setAiMode(null);
       show(
-        generatingInitialVersion
-          ? `AI đã tạo Version ${created.versionNumber} ở trạng thái DRAFT.`
-          : `AI đã tái tạo Version ${created.versionNumber} và giữ lại lịch sử cũ.`,
+        acceptedExecution.operation === "REGENERATE"
+          ? "Yêu cầu tái tạo lộ trình đã được tiếp nhận."
+          : "Yêu cầu sinh lộ trình đã được tiếp nhận.",
       );
-      await load();
     } catch (error) {
       setAiError(getErrorMessage(error));
-    } finally {
-      setBusy(false);
     }
   }
   async function activate() {
@@ -227,7 +241,7 @@ export function RoadmapDetailView() {
                   Kích hoạt
                 </Button>
               )}
-              {!editable && (
+              {!draftVersionSelected && !aiBlockingMutations && (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="success"
@@ -253,6 +267,12 @@ export function RoadmapDetailView() {
           )}
         </div>
       </Card>
+      <RoadmapAiExecutionStatus
+        execution={aiExecution}
+        recovering={aiRecovering}
+        pollingError={aiPollingError}
+        onDismiss={dismissAiFailure}
+      />
       <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">
         <Card className="h-fit p-4">
           <div className="flex items-center gap-2 px-2 py-1">
@@ -311,11 +331,21 @@ export function RoadmapDetailView() {
                   Dùng AI để tự động phân rã mục tiêu hoặc tạo phiên bản thủ công.
                 </p>
                 <div className="mt-5 flex flex-wrap justify-center gap-3">
-                  <Button variant="success" onClick={() => openAiModal("generate")} loading={busy}>
+                  <Button
+                    variant="success"
+                    onClick={() => openAiModal("generate")}
+                    loading={aiBlockingMutations}
+                    disabled={aiBlockingMutations}
+                  >
                     <Sparkles className="size-4" />
                     Sinh bằng AI
                   </Button>
-                  <Button variant="secondary" onClick={() => void createVersion()} loading={busy}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void createVersion()}
+                    loading={busy}
+                    disabled={aiBlockingMutations}
+                  >
                     Tạo Version 1 thủ công
                   </Button>
                 </div>
@@ -328,7 +358,7 @@ export function RoadmapDetailView() {
       {aiMode && (
         <RoadmapAiGenerationModal
           mode={aiMode}
-          busy={busy}
+          busy={aiSubmitting}
           submissionError={aiError}
           onClose={closeAiModal}
           onSubmit={(input) => void submitAi(input)}

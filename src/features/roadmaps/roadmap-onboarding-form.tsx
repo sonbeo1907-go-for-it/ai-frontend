@@ -1,16 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, BookOpenCheck, Check, Clock3, Gauge, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Textarea } from "@/components/ui/field";
 import { PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
-import type { ProficiencyLevel, RoadmapOnboarding, RoadmapVersion } from "@/types/api";
+import type { ProficiencyLevel, RoadmapOnboarding } from "@/types/api";
 import {
   RoadmapAiGenerationModal,
   type RoadmapAiGenerationInput,
 } from "./roadmap-ai-generation-modal";
+import { queueRoadmapGeneration, rememberRoadmapAiExecution } from "./roadmap-ai-execution-api";
 
 const levels: Array<{ value: ProficiencyLevel; label: string; detail: string }> = [
   { value: "BEGINNER", label: "Mới bắt đầu", detail: "Tôi chưa có nền tảng về chủ đề này." },
@@ -37,6 +38,10 @@ export function RoadmapOnboardingForm() {
   const [error, setError] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
   const [aiError, setAiError] = useState("");
+  const aiSubmissionIntentRef = useRef<{
+    fingerprint: string;
+    idempotencyKey: string;
+  } | null>(null);
   useEffect(() => {
     void apiRequest<RoadmapOnboarding>("/api/v1/roadmap-onboarding", { method: "POST" })
       .then((data) => {
@@ -108,15 +113,30 @@ export function RoadmapOnboardingForm() {
     setAiError("");
 
     try {
-      await persist();
-      await apiRequest<RoadmapOnboarding>(
-        `/api/v1/roadmap-onboarding/${record.roadmapId}/complete`,
-        { method: "POST" },
+      if (!record.completed) {
+        await persist();
+        const completedRecord = await apiRequest<RoadmapOnboarding>(
+          `/api/v1/roadmap-onboarding/${record.roadmapId}/complete`,
+          { method: "POST" },
+        );
+        setRecord(completedRecord);
+      }
+
+      const normalizedMaterialIds = [...input.materialIds].sort();
+      const fingerprint = JSON.stringify(normalizedMaterialIds);
+      const previousIntent = aiSubmissionIntentRef.current;
+      const idempotencyKey =
+        previousIntent?.fingerprint === fingerprint
+          ? previousIntent.idempotencyKey
+          : crypto.randomUUID();
+      aiSubmissionIntentRef.current = { fingerprint, idempotencyKey };
+
+      const execution = await queueRoadmapGeneration(
+        record.roadmapId,
+        normalizedMaterialIds,
+        idempotencyKey,
       );
-      await apiRequest<RoadmapVersion>(`/api/v1/roadmaps/${record.roadmapId}/generate-ai`, {
-        method: "POST",
-        body: JSON.stringify({ materialIds: input.materialIds }),
-      });
+      rememberRoadmapAiExecution(record.roadmapId, execution.id);
       setAiOpen(false);
       router.replace(`/roadmaps/${record.roadmapId}`);
     } catch (nextError) {

@@ -15,6 +15,10 @@ export type CredentialSelectionStrategy = "PRIORITY";
 export type AiPurpose =
   "DOCUMENT_EXTRACTION" | "ROADMAP_GENERATION" | "DAILY_PLAN_GENERATION" | "DAILY_PLAN_REVIEW";
 export type AiAdjustmentAction = "CARRY_OVER" | "SPLIT" | "RESCHEDULE" | "DROP";
+export type AiExecutionStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+export type AiExecutionOperation = "GENERATE" | "REGENERATE";
+export type AiExecutionTargetType = "ROADMAP";
+export type AiExecutionResultType = "ROADMAP_VERSION";
 
 export interface ApiResponse<T> {
   data: T;
@@ -31,6 +35,25 @@ export interface ApiErrorBody {
   path?: string;
   requestId?: string;
   violations?: FieldViolation[];
+}
+export interface AiExecution {
+  id: string;
+  entityVersion: number;
+  providerConfigId: string;
+  purpose: AiPurpose;
+  operation: AiExecutionOperation;
+  targetType: AiExecutionTargetType;
+  targetId: string;
+  status: AiExecutionStatus;
+  resultType?: AiExecutionResultType;
+  resultId?: string;
+  attemptCount: number;
+  failureCode?: string;
+  failureMessage?: string;
+  startedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface TokenResponse {
   accessToken: string;
