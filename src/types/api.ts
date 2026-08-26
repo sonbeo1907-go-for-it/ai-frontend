@@ -314,3 +314,6 @@ export interface UpdateAiProviderCredentialInput {
   secretRef: string;
   priority: number;
 }
+
+export * from "./evaluation";
+
