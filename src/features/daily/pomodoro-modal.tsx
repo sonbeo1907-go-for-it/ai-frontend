@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, RotateCcw, TimerReset } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -25,19 +25,40 @@ export function PomodoroModal({
   const [mode, setMode] = useState<"focus" | "break">("focus");
   const [seconds, setSeconds] = useState(25 * 60);
   const [running, setRunning] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState("");
-  const taskId = selectedTaskId || initialTaskId || items[0]?.id || "";
+  const [selectedTaskId, setSelectedTaskId] = useState(() => {
+    const requestedTaskExists = items.some((item) => item.id === initialTaskId);
+    return requestedTaskExists ? initialTaskId! : (items[0]?.id ?? "");
+  });
+  const [sessionTaskId, setSessionTaskId] = useState("");
+  const taskId = selectedTaskId;
   const completing = useRef(false);
+  const completedSession = useRef(false);
+  const deadline = useRef<number | null>(null);
+
+  const selectedTask = useMemo(
+    () => items.find((item) => item.id === taskId) ?? null,
+    [items, taskId],
+  );
 
   useEffect(() => {
     if (!running) return;
-    const id = window.setInterval(() => setSeconds((value) => Math.max(0, value - 1)), 1000);
+
+    const updateRemainingTime = () => {
+      if (deadline.current === null) return;
+      const remaining = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
+      setSeconds(remaining);
+    };
+
+    updateRemainingTime();
+    const id = window.setInterval(updateRemainingTime, 250);
     return () => window.clearInterval(id);
   }, [running]);
 
   useEffect(() => {
-    if (seconds !== 0 || completing.current) return;
+    if (seconds !== 0 || completing.current || completedSession.current) return;
     setRunning(false);
+    deadline.current = null;
+    completedSession.current = true;
     try {
       const context = new AudioContext();
       const oscillator = context.createOscillator();
@@ -48,23 +69,42 @@ export function PomodoroModal({
     } catch {
       // Audio can be unavailable when browser autoplay policies block it.
     }
-    if (mode === "focus" && taskId) {
+    if (mode === "focus" && sessionTaskId) {
       completing.current = true;
-      void onComplete(taskId, 25).finally(() => {
+      void onComplete(sessionTaskId, 25).finally(() => {
         completing.current = false;
       });
     }
-  }, [seconds, mode, taskId, onComplete]);
+  }, [seconds, mode, sessionTaskId, onComplete]);
 
   function chooseMode(next: "focus" | "break") {
     setMode(next);
     setSeconds(next === "focus" ? 25 * 60 : 5 * 60);
     setRunning(false);
+    setSessionTaskId("");
+    deadline.current = null;
+    completedSession.current = false;
   }
 
   function reset() {
     setSeconds(mode === "focus" ? 25 * 60 : 5 * 60);
     setRunning(false);
+    setSessionTaskId("");
+    deadline.current = null;
+    completedSession.current = false;
+  }
+
+  function toggleTimer() {
+    if (running) {
+      deadline.current = null;
+      setRunning(false);
+      return;
+    }
+
+    if (mode === "focus") setSessionTaskId(taskId);
+    deadline.current = Date.now() + seconds * 1000;
+    completedSession.current = false;
+    setRunning(true);
   }
 
   const display = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
@@ -76,16 +116,21 @@ export function PomodoroModal({
       title="Pomodoro Focus"
       description="25 phút tập trung · 5 phút nghỉ"
       width="max-w-md"
+      confirmClose={running}
     >
       <div className="text-center">
         <div className="mx-auto inline-grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-xs font-bold">
           <button
+            type="button"
+            aria-pressed={mode === "focus"}
             className={`rounded-lg px-4 py-2 ${mode === "focus" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500"}`}
             onClick={() => chooseMode("focus")}
           >
             Tập trung
           </button>
           <button
+            type="button"
+            aria-pressed={mode === "break"}
             className={`rounded-lg px-4 py-2 ${mode === "break" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}
             onClick={() => chooseMode("break")}
           >
@@ -99,6 +144,11 @@ export function PomodoroModal({
               ? "Tập trung vào một nhiệm vụ duy nhất."
               : "Rời màn hình, uống nước và thư giãn."}
           </p>
+          {mode === "focus" && selectedTask && (
+            <p className="mt-3 rounded-xl bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-800">
+              Đang tập trung: {selectedTask.title}
+            </p>
+          )}
         </div>
         <Select
           value={taskId}
@@ -119,8 +169,8 @@ export function PomodoroModal({
           </Button>
           <Button
             className="min-w-32"
-            onClick={() => setRunning((value) => !value)}
-            disabled={mode === "focus" && !taskId}
+            onClick={toggleTimer}
+            disabled={seconds === 0 || (mode === "focus" && !taskId)}
           >
             {running ? (
               <>

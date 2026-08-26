@@ -17,6 +17,10 @@ import type {
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<TokenResponse> | null = null;
+let authenticationExpiryNotified = false;
+
+export const AUTHENTICATION_EXPIRED_EVENT = "authentication-expired";
+const AUTHENTICATION_EXPIRED_NOTICE_KEY = "authentication-expired-notice";
 
 export class ApiClientError extends Error {
   constructor(public readonly details: ApiErrorBody) {
@@ -26,6 +30,21 @@ export class ApiClientError extends Error {
 }
 export function setAccessToken(token: string | null) {
   accessToken = token;
+  if (token) authenticationExpiryNotified = false;
+}
+
+function notifyAuthenticationExpired() {
+  if (typeof window === "undefined" || authenticationExpiryNotified) return;
+  authenticationExpiryNotified = true;
+  window.sessionStorage.setItem(AUTHENTICATION_EXPIRED_NOTICE_KEY, "true");
+  window.dispatchEvent(new Event(AUTHENTICATION_EXPIRED_EVENT));
+}
+
+export function consumeAuthenticationExpiredNotice() {
+  if (typeof window === "undefined") return false;
+  const expired = window.sessionStorage.getItem(AUTHENTICATION_EXPIRED_NOTICE_KEY) === "true";
+  if (expired) window.sessionStorage.removeItem(AUTHENTICATION_EXPIRED_NOTICE_KEY);
+  return expired;
 }
 
 async function parseError(response: Response): Promise<ApiErrorBody> {
@@ -81,7 +100,12 @@ export async function apiRequest<T>(
       return apiRequest<T>(path, init, false);
     } catch {
       setAccessToken(null);
+      notifyAuthenticationExpired();
     }
+  }
+  if (response.status === 401 && !retry && !path.includes("/auth/")) {
+    setAccessToken(null);
+    notifyAuthenticationExpired();
   }
   if (!response.ok) throw new ApiClientError(await parseError(response));
   if (response.status === 204) return undefined as T;

@@ -9,7 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { authApi, setAccessToken } from "@/lib/api-client";
+import { AUTHENTICATION_EXPIRED_EVENT, authApi, setAccessToken } from "@/lib/api-client";
+import { useToast } from "@/components/providers/toast-provider";
 import type { ProfileResponse } from "@/types/api";
 
 type AuthStatus = "loading" | "authenticated" | "anonymous";
@@ -25,6 +26,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { show } = useToast();
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const booted = useRef(false);
@@ -47,6 +49,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("anonymous");
       });
   }, [refreshProfile]);
+
+  useEffect(() => {
+    const handleAuthenticationExpired = () => {
+      setAccessToken(null);
+      setProfile(null);
+      setStatus("anonymous");
+      show("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.", "error");
+    };
+    window.addEventListener(AUTHENTICATION_EXPIRED_EVENT, handleAuthenticationExpired);
+    return () =>
+      window.removeEventListener(AUTHENTICATION_EXPIRED_EVENT, handleAuthenticationExpired);
+  }, [show]);
 
   const completeLogin = useCallback(
     async (tokenPromise: Promise<{ accessToken: string }>) => {

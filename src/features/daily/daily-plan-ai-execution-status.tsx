@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { AiExecution } from "@/types/api";
 
-type RoadmapAiExecutionStatusProps = {
+type DailyPlanAiExecutionStatusProps = {
   execution: AiExecution | null;
   recovering: boolean;
   pollingError: string;
@@ -18,13 +18,13 @@ type RoadmapAiExecutionStatusProps = {
   onDismiss: () => void;
 };
 
-export function RoadmapAiExecutionStatus({
+export function DailyPlanAiExecutionStatus({
   execution,
   recovering,
   pollingError,
   onRefresh,
   onDismiss,
-}: RoadmapAiExecutionStatusProps) {
+}: DailyPlanAiExecutionStatusProps) {
   if (!execution && !recovering && !pollingError) return null;
 
   if (!execution) {
@@ -39,7 +39,7 @@ export function RoadmapAiExecutionStatus({
           <span>{recovering ? "Đang kiểm tra tiến trình AI…" : pollingError}</span>
         </div>
         {!recovering && (
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 gap-1">
             <Button variant="ghost" size="sm" onClick={onRefresh}>
               <RefreshCw className="size-4" />
               Thử lại
@@ -90,17 +90,16 @@ export function RoadmapAiExecutionStatus({
             <LoaderCircle className="size-5 animate-spin" />
           )}
         </span>
-
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className={`font-extrabold ${failed ? "text-rose-900" : "text-slate-950"}`}>
               {failed
-                ? "Không thể tạo lộ trình bằng AI"
+                ? "Không thể tạo kế hoạch ngày bằng AI"
                 : succeeded
-                  ? "AI đã hoàn tất lộ trình"
+                  ? "AI đã hoàn tất kế hoạch ngày"
                   : queued
                     ? "Yêu cầu đang chờ xử lý"
-                    : "AI đang tạo lộ trình"}
+                    : "AI đang tạo kế hoạch ngày"}
             </p>
             {failed && (
               <Button variant="ghost" size="sm" onClick={onDismiss}>
@@ -115,12 +114,12 @@ export function RoadmapAiExecutionStatus({
               : succeeded
                 ? "Đang tải phiên bản DRAFT vừa được tạo."
                 : running
-                  ? "Bạn có thể rời trang. Tiến trình sẽ tiếp tục chạy ở máy chủ."
-                  : "Yêu cầu đã được tiếp nhận và sẽ tự động bắt đầu khi có worker sẵn sàng."}
+                  ? "Bạn có thể rời trang. Tiến trình tiếp tục chạy ở máy chủ."
+                  : "Yêu cầu đã được tiếp nhận và sẽ bắt đầu khi worker sẵn sàng."}
           </p>
           {pollingError && !failed && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-700">
-              <span>Chưa thể cập nhật trạng thái: {pollingError}. Hệ thống sẽ tự thử lại.</span>
+              <span>Chưa thể cập nhật trạng thái: {pollingError}</span>
               <Button variant="ghost" size="sm" onClick={onRefresh}>
                 <RefreshCw className="size-3.5" />
                 Kiểm tra ngay
@@ -131,7 +130,7 @@ export function RoadmapAiExecutionStatus({
             <div className="mt-3 flex items-center gap-2 text-xs font-bold text-indigo-700">
               <Sparkles className="size-3.5" />
               {execution.operation === "REGENERATE"
-                ? "Đang tạo phiên bản mới"
+                ? "Đang tạo phiên bản mới và giữ lịch sử cũ"
                 : "Đang tạo bản DRAFT"}
             </div>
           )}

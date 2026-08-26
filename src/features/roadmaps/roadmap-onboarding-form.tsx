@@ -223,6 +223,8 @@ export function RoadmapOnboardingForm() {
             <div className="mt-6 grid gap-3">
               {levels.map((level) => (
                 <button
+                  type="button"
+                  aria-pressed={form.proficiencyLevel === level.value}
                   key={level.value}
                   onClick={() => setForm({ ...form, proficiencyLevel: level.value })}
                   className={`focus-ring rounded-2xl border p-4 text-left transition ${form.proficiencyLevel === level.value ? "border-indigo-600 bg-indigo-50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}
@@ -261,6 +263,8 @@ export function RoadmapOnboardingForm() {
                 <div className="grid grid-cols-3 gap-2">
                   {[30, 60, 120].map((value) => (
                     <button
+                      type="button"
+                      aria-pressed={form.dailyCommitmentMinutes === value}
                       key={value}
                       onClick={() => setForm({ ...form, dailyCommitmentMinutes: value })}
                       className={`focus-ring rounded-xl border py-3 text-sm font-bold ${form.dailyCommitmentMinutes === value ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}`}
@@ -274,6 +278,8 @@ export function RoadmapOnboardingForm() {
                 <div className="grid grid-cols-3 gap-2">
                   {[30, 60, 90].map((value) => (
                     <button
+                      type="button"
+                      aria-pressed={form.expectedDurationDays === value}
                       key={value}
                       onClick={() => setForm({ ...form, expectedDurationDays: value })}
                       className={`focus-ring rounded-xl border py-3 text-sm font-bold ${form.expectedDurationDays === value ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}`}

@@ -12,6 +12,7 @@ import {
   Info,
   ListChecks,
   MoreHorizontal,
+  Pencil,
   Plus,
   SkipForward,
   Sparkles,
@@ -26,7 +27,12 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { PageLoading, ProgressBar } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
-import { formatDate } from "@/lib/format";
+import { formatDateOnly } from "@/lib/format";
+import {
+  dailyPlanStatusLabels,
+  dailyTaskCategoryLabels,
+  versionStatusLabels,
+} from "@/lib/display-labels";
 import type {
   AiAdjustmentAction,
   DailyPlan,
@@ -35,7 +41,9 @@ import type {
   DailyTaskCategory,
   ProgressEntryStatus,
 } from "@/types/api";
+import { DailyPlanAiExecutionStatus } from "./daily-plan-ai-execution-status";
 import { PomodoroModal } from "./pomodoro-modal";
+import { useDailyPlanAiExecution } from "./use-daily-plan-ai-execution";
 
 const getAdjustmentDisplay = (action: AiAdjustmentAction) => {
   switch (action) {
@@ -62,10 +70,10 @@ export function DailyPlanDetailView() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [aiGenerating, setAiGenerating] = useState(false);
   const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
   const [activationConfirmOpen, setActivationConfirmOpen] = useState(false);
   const [progressTarget, setProgressTarget] = useState<DailyPlanItem | null>(null);
+  const [editTaskTarget, setEditTaskTarget] = useState<DailyPlanItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DailyPlanItem | null>(null);
   const [pomodoro, setPomodoro] = useState<{ open: boolean; taskId?: string }>({ open: false });
   const load = useCallback(async () => {
@@ -96,6 +104,25 @@ export function DailyPlanDetailView() {
     const id = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(id);
   }, [load]);
+  const handleAiSucceeded = useCallback(
+    async (resultId: string) => {
+      await load();
+      setSelectedId(resultId);
+      show("AI đã tạo xong phiên bản DRAFT mới.");
+    },
+    [load, show],
+  );
+  const {
+    execution: aiExecution,
+    recovering: aiRecovering,
+    submitting: aiSubmitting,
+    pollingError: aiPollingError,
+    active: aiActive,
+    generate: generateWithAi,
+    regenerate: regenerateWithAi,
+    refreshStatus: refreshAiStatus,
+    dismissFailure: dismissAiFailure,
+  } = useDailyPlanAiExecution(id, handleAiSucceeded);
   const version = useMemo(
     () => versions.find((item) => item.id === selectedId) ?? null,
     [versions, selectedId],
@@ -104,7 +131,9 @@ export function DailyPlanDetailView() {
     () => versions.find((item) => item.status === "DRAFT") ?? null,
     [versions],
   );
-  const editable = version?.status === "DRAFT";
+  const aiBlockingMutations = aiRecovering || aiSubmitting || aiActive;
+  const draftVersionSelected = version?.status === "DRAFT";
+  const editable = draftVersionSelected && !aiBlockingMutations;
   const executable =
     version?.status === "ACTIVE" && plan && ["READY", "IN_PROGRESS"].includes(plan.status);
   const aiGenerationUnavailableReason = useMemo(() => {
@@ -117,7 +146,7 @@ export function DailyPlanDetailView() {
     }
     return null;
   }, [plan]);
-  const canGenerateAi = !aiGenerationUnavailableReason;
+  const canGenerateAi = !aiGenerationUnavailableReason && !aiBlockingMutations;
   const items = version?.items ?? [];
   const earned = items.reduce(
     (sum, item) =>
@@ -146,7 +175,7 @@ export function DailyPlanDetailView() {
     }, "Đã tạo phiên bản DRAFT mới; phiên bản ACTIVE chưa bị thay đổi.");
   }
   async function handleGenerateAiDraft() {
-    if (aiGenerating || !canGenerateAi) return;
+    if (!canGenerateAi) return;
     if (currentDraft && currentDraft.items.length > 0) {
       setAiConfirmOpen(true);
       return;
@@ -155,24 +184,15 @@ export function DailyPlanDetailView() {
   }
   async function executeGenerateAiDraft() {
     setAiConfirmOpen(false);
-    setAiGenerating(true);
     try {
-      const created = await apiRequest<DailyPlanVersion>(
-        `/api/v1/daily-plans/${id}/versions/generate`,
-        {
-          method: "POST",
-          headers: {
-            "Idempotency-Key": crypto.randomUUID(),
-          },
-        },
-      );
-      show("Đã sinh kế hoạch AI thành công.");
-      await load();
-      setSelectedId(created.id);
+      if (currentDraft && currentDraft.items.length > 0) {
+        await regenerateWithAi();
+      } else {
+        await generateWithAi();
+      }
+      show("Yêu cầu đã được tiếp nhận. Bạn có thể rời trang trong lúc AI xử lý.");
     } catch (error) {
       show(getErrorMessage(error), "error");
-    } finally {
-      setAiGenerating(false);
     }
   }
   async function handleActivate() {
@@ -252,12 +272,12 @@ export function DailyPlanDetailView() {
                         : "slate"
                   }
                 >
-                  {plan.status}
+                  {dailyPlanStatusLabels[plan.status]}
                 </Badge>
                 <Badge>{plan.timeZoneSnapshot}</Badge>
               </div>
               <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">
-                {formatDate(`${plan.planDate}T00:00:00`, {
+                {formatDateOnly(plan.planDate, {
                   weekday: "long",
                   day: "2-digit",
                   month: "long",
@@ -272,16 +292,18 @@ export function DailyPlanDetailView() {
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={() => void handleGenerateAiDraft()}
-                loading={aiGenerating}
-                disabled={aiGenerating || !canGenerateAi}
+                loading={aiSubmitting || aiRecovering}
+                disabled={!canGenerateAi}
                 className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none shadow-[0_0_15px_rgba(99,102,241,0.5)]"
               >
                 <Sparkles className="size-4" />
-                {aiGenerating
-                  ? "Đang sinh kế hoạch..."
-                  : currentDraft
-                    ? "Sinh lại kế hoạch AI"
-                    : "Sinh kế hoạch AI"}
+                {aiActive
+                  ? "AI đang xử lý..."
+                  : aiSubmitting || aiRecovering
+                    ? "Đang gửi yêu cầu..."
+                    : currentDraft
+                      ? "Sinh lại kế hoạch AI"
+                      : "Sinh kế hoạch AI"}
               </Button>
               {editable && (
                 <Button variant="secondary" onClick={() => setAddOpen(true)}>
@@ -300,7 +322,7 @@ export function DailyPlanDetailView() {
                   Kích hoạt
                 </Button>
               )}
-              {!editable && (
+              {!draftVersionSelected && !aiBlockingMutations && (
                 <Button onClick={() => void createDraft()} loading={busy}>
                   <CopyPlus className="size-4" />
                   Tạo bản chỉnh sửa
@@ -335,6 +357,13 @@ export function DailyPlanDetailView() {
           </div>
         </div>
       </Card>
+      <DailyPlanAiExecutionStatus
+        execution={aiExecution}
+        recovering={aiRecovering}
+        pollingError={aiPollingError}
+        onRefresh={refreshAiStatus}
+        onDismiss={dismissAiFailure}
+      />
       <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">
         <Card className="h-fit p-4">
           <h3 className="px-2 py-1 text-sm font-black">Phiên bản kế hoạch</h3>
@@ -356,7 +385,7 @@ export function DailyPlanDetailView() {
                           : "slate"
                     }
                   >
-                    {item.status}
+                    {versionStatusLabels[item.status]}
                   </Badge>
                 </div>
                 <p className="mt-1 text-[11px] text-slate-400">
@@ -412,6 +441,7 @@ export function DailyPlanDetailView() {
                 item={item}
                 editable={Boolean(editable)}
                 executable={Boolean(executable)}
+                onEdit={() => setEditTaskTarget(item)}
                 onDelete={() => setDeleteTarget(item)}
                 onProgress={() => setProgressTarget(item)}
                 onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
@@ -437,6 +467,24 @@ export function DailyPlanDetailView() {
           }}
         />
       )}
+      {version && editTaskTarget && (
+        <EditTaskModal
+          open
+          item={editTaskTarget}
+          onClose={() => setEditTaskTarget(null)}
+          onSave={async (values) => {
+            await action(
+              () =>
+                apiRequest<DailyPlanVersion>(
+                  `/api/v1/daily-plans/${id}/versions/${version.id}/items/${editTaskTarget.id}`,
+                  { method: "PATCH", body: JSON.stringify(values) },
+                ),
+              "Đã cập nhật nhiệm vụ trong bản DRAFT.",
+            );
+            setEditTaskTarget(null);
+          }}
+        />
+      )}
       {progressTarget && (
         <ProgressModal
           open
@@ -455,16 +503,19 @@ export function DailyPlanDetailView() {
           }}
         />
       )}
-      <PomodoroModal
-        open={pomodoro.open}
-        onClose={() => setPomodoro({ open: false })}
-        items={items}
-        initialTaskId={pomodoro.taskId}
-        onComplete={recordPomodoro}
-      />
+      {pomodoro.open && (
+        <PomodoroModal
+          open
+          onClose={() => setPomodoro({ open: false })}
+          items={items}
+          initialTaskId={pomodoro.taskId}
+          onComplete={recordPomodoro}
+        />
+      )}
       <Modal
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
+        closeDisabled={busy}
         title="Xóa nhiệm vụ?"
         description="Chỉ task trong bản DRAFT chưa có lịch sử tiến độ mới có thể bị xóa."
       >
@@ -481,6 +532,7 @@ export function DailyPlanDetailView() {
       <Modal
         open={aiConfirmOpen}
         onClose={() => setAiConfirmOpen(false)}
+        closeDisabled={aiSubmitting}
         title="Sinh lại bản nháp?"
         description="Bản DRAFT hiện tại sẽ được giữ trong lịch sử ở trạng thái SUPERSEDED. AI sẽ tạo một phiên bản DRAFT mới và không ghi đè nội dung cũ."
       >
@@ -490,7 +542,7 @@ export function DailyPlanDetailView() {
           </Button>
           <Button
             onClick={() => void executeGenerateAiDraft()}
-            loading={aiGenerating}
+            loading={aiSubmitting}
             className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none"
           >
             <Sparkles className="size-4" />
@@ -501,6 +553,7 @@ export function DailyPlanDetailView() {
       <Modal
         open={activationConfirmOpen}
         onClose={() => setActivationConfirmOpen(false)}
+        closeDisabled={busy}
         title="Xác nhận các đề xuất của AI?"
         description="Phiên bản này có đề xuất cần bạn xem xét. Khi kích hoạt, bạn xác nhận sử dụng nội dung hiện tại; các đề xuất bị dời hoặc bỏ không được tự động thêm lại."
       >
@@ -539,6 +592,7 @@ function TaskCard({
   item,
   editable,
   executable,
+  onEdit,
   onDelete,
   onProgress,
   onPomodoro,
@@ -546,6 +600,7 @@ function TaskCard({
   item: DailyPlanItem;
   editable: boolean;
   executable: boolean;
+  onEdit: () => void;
   onDelete: () => void;
   onProgress: () => void;
   onPomodoro: () => void;
@@ -600,7 +655,7 @@ function TaskCard({
               <Clock3 className="size-3" />
               {item.plannedMinutes ?? 30} phút
             </span>
-            <span>{item.category}</span>
+            <span>{dailyTaskCategoryLabels[item.category]}</span>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-1">
@@ -623,17 +678,141 @@ function TaskCard({
             </>
           )}
           {editable && (
-            <button
-              onClick={onDelete}
-              className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-              title="Xóa"
-            >
-              <Trash2 className="size-4" />
-            </button>
+            <>
+              <button
+                onClick={onEdit}
+                className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                title="Chỉnh sửa"
+              >
+                <Pencil className="size-4" />
+              </button>
+              <button
+                onClick={onDelete}
+                className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                title="Xóa"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </>
           )}
         </div>
       </div>
     </Card>
+  );
+}
+function EditTaskModal({
+  open,
+  item,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  item: DailyPlanItem;
+  onClose: () => void;
+  onSave: (values: {
+    title: string;
+    description: string;
+    category: DailyTaskCategory;
+    plannedMinutes: number;
+    orderIndex: number;
+  }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(item.title);
+  const [description, setDescription] = useState(item.description ?? "");
+  const [category, setCategory] = useState<DailyTaskCategory>(item.category);
+  const [minutes, setMinutes] = useState(item.plannedMinutes ?? 30);
+  const [position, setPosition] = useState((item.orderIndex ?? 0) + 1);
+  const [loading, setLoading] = useState(false);
+  const dirty =
+    title.trim() !== item.title ||
+    description.trim() !== (item.description ?? "") ||
+    category !== item.category ||
+    minutes !== (item.plannedMinutes ?? 30) ||
+    position !== (item.orderIndex ?? 0) + 1;
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      await onSave({
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        plannedMinutes: minutes,
+        orderIndex: position - 1,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Chỉnh sửa nhiệm vụ"
+      description="Thay đổi chỉ áp dụng cho phiên bản DRAFT đang chọn."
+      closeDisabled={loading}
+      confirmClose={dirty}
+    >
+      <form onSubmit={submit} className="space-y-5">
+        <Field label="Tên nhiệm vụ">
+          <Input
+            autoFocus
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            required
+          />
+        </Field>
+        <Field label="Mô tả">
+          <Textarea
+            rows={3}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Nhóm">
+            <Select
+              value={category}
+              onChange={(event) => setCategory(event.target.value as DailyTaskCategory)}
+            >
+              <option value="CUSTOM">Tùy chỉnh</option>
+              <option value="REVIEW">Ôn tập</option>
+              <option value="NEW_MATERIAL">Kiến thức mới</option>
+              <option value="PRACTICE">Thực hành</option>
+            </Select>
+          </Field>
+          <Field label="Dự kiến (phút)">
+            <Input
+              type="number"
+              min={1}
+              max={1440}
+              value={minutes}
+              onChange={(event) => setMinutes(Number(event.target.value))}
+              required
+            />
+          </Field>
+          <Field label="Vị trí">
+            <Input
+              type="number"
+              min={1}
+              value={position}
+              onChange={(event) => setPosition(Number(event.target.value))}
+              required
+            />
+          </Field>
+        </div>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button type="submit" loading={loading} disabled={!title.trim() || !dirty}>
+            Lưu thay đổi
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 function AddTaskModal({
@@ -679,6 +858,10 @@ function AddTaskModal({
       onClose={onClose}
       title="Thêm nhiệm vụ thủ công"
       description="Task chỉ được thêm vào phiên bản DRAFT đang chọn."
+      closeDisabled={loading}
+      confirmClose={Boolean(
+        title.trim() || description.trim() || category !== "CUSTOM" || minutes !== 30,
+      )}
     >
       <form onSubmit={submit} className="space-y-5">
         <Field label="Tên nhiệm vụ">
@@ -775,7 +958,16 @@ function ProgressModal({
     }
   }
   return (
-    <Modal open={open} onClose={onClose} title="Ghi nhận kết quả" description={item.title}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Ghi nhận kết quả"
+      description={item.title}
+      closeDisabled={loading}
+      confirmClose={Boolean(
+        result.trim() || note.trim() || minutes !== (item.plannedMinutes ?? 30),
+      )}
+    >
       <form onSubmit={submit} className="space-y-5">
         <Field label="Kết quả">
           <div className="grid grid-cols-3 gap-2">
@@ -788,6 +980,7 @@ function ProgressModal({
             ).map((option) => (
               <button
                 type="button"
+                aria-pressed={status === option.value}
                 key={option.value}
                 onClick={() => setStatus(option.value)}
                 className={`focus-ring rounded-xl border px-2 py-3 text-xs font-bold ${status === option.value ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}`}

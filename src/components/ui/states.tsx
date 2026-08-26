@@ -34,7 +34,14 @@ export function EmptyState({
 }
 export function ProgressBar({ value }: { value: number }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`Tiến độ ${value}%`}>
+    <div
+      className="h-2 overflow-hidden rounded-full bg-slate-100"
+      role="progressbar"
+      aria-label="Tiến độ"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.max(0, Math.min(100, value))}
+    >
       <div
         className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-blue-500 transition-all"
         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}

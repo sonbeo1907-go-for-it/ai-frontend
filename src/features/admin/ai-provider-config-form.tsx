@@ -172,7 +172,8 @@ export function AiProviderConfigForm({
   return (
     <Modal
       open
-      onClose={saving ? () => undefined : onClose}
+      onClose={onClose}
+      closeDisabled={saving}
       title={editing ? "Chỉnh sửa Model Configuration" : "Thêm Model Configuration"}
       description="Gắn một model của provider vào đúng mục đích AI trong hệ thống."
       width="max-w-3xl"

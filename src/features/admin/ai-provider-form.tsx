@@ -164,7 +164,8 @@ export function AiProviderForm({
   return (
     <Modal
       open
-      onClose={saving ? () => undefined : onClose}
+      onClose={onClose}
+      closeDisabled={saving}
       title={editing ? "Chỉnh sửa Nhà cung cấp AI" : "Thêm Nhà cung cấp AI (Provider)"}
       description={
         editing

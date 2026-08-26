@@ -15,7 +15,6 @@ export default function ProfilePage() {
   const [form, setForm] = useState(() => ({
     displayName: profile?.profile?.displayName ?? "",
     timeZone: profile?.profile?.timeZone ?? "",
-    locale: profile?.profile?.locale ?? "vi",
     defaultDailyMinutes: profile?.profile?.defaultDailyMinutes ?? 60,
   }));
   const [password, setPassword] = useState({
@@ -31,7 +30,7 @@ export default function ProfilePage() {
     try {
       await apiRequest<ProfileResponse>("/api/v1/profile", {
         method: "PATCH",
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, locale: "vi" }),
       });
       await refreshProfile();
       show("Hồ sơ cá nhân đã được cập nhật.");
@@ -82,28 +81,17 @@ export default function ProfilePage() {
               required
             />
           </Field>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Múi giờ">
-              <div className="relative">
-                <Globe2 className="absolute left-3.5 top-3.5 size-4 text-slate-400" />
-                <Input
-                  className="pl-10"
-                  value={form.timeZone}
-                  onChange={(event) => setForm({ ...form, timeZone: event.target.value })}
-                  required
-                />
-              </div>
-            </Field>
-            <Field label="Ngôn ngữ">
-              <Select
-                value={form.locale}
-                onChange={(event) => setForm({ ...form, locale: event.target.value })}
-              >
-                <option value="vi">Tiếng Việt</option>
-                <option value="en">English</option>
-              </Select>
-            </Field>
-          </div>
+          <Field label="Múi giờ">
+            <div className="relative">
+              <Globe2 className="absolute left-3.5 top-3.5 size-4 text-slate-400" />
+              <Input
+                className="pl-10"
+                value={form.timeZone}
+                onChange={(event) => setForm({ ...form, timeZone: event.target.value })}
+                required
+              />
+            </div>
+          </Field>
           <Field label="Thời lượng học mặc định">
             <Select
               value={form.defaultDailyMinutes}

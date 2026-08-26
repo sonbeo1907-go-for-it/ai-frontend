@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { useAuth } from "@/features/auth/auth-context";
 import { GoogleSignIn } from "@/features/auth/google-sign-in";
-import { getErrorMessage } from "@/lib/api-client";
+import { consumeAuthenticationExpiredNotice, getErrorMessage } from "@/lib/api-client";
 
 function LoginForm() {
   const router = useRouter();
@@ -18,6 +18,14 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    const noticeId = window.setTimeout(() => {
+      if (consumeAuthenticationExpiredNotice()) {
+        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.");
+      }
+    }, 0);
+    return () => window.clearTimeout(noticeId);
+  }, []);
   const finish = useCallback(
     (role: "USER" | "ADMIN", setupComplete: boolean) => {
       const requested = params.get("next");

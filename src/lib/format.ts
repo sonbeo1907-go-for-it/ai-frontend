@@ -5,6 +5,14 @@ export function formatDate(value?: string, options?: Intl.DateTimeFormatOptions)
     options ?? { day: "2-digit", month: "2-digit", year: "numeric" },
   ).format(new Date(value));
 }
+
+export function formatDateOnly(value?: string, options?: Intl.DateTimeFormatOptions) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("vi-VN", {
+    ...(options ?? { day: "2-digit", month: "2-digit", year: "numeric" }),
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00Z`));
+}
 export function formatBytes(value?: number) {
   if (value == null) return "—";
   if (value < 1024) return `${value} B`;
