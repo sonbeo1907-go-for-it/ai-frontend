@@ -13,14 +13,16 @@ import { Modal } from "@/components/ui/modal";
 import { EmptyState, PageLoading, ProgressBar } from "@/components/ui/states";
 import { useAuth } from "@/features/auth/auth-context";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
-import { formatDate, todayIso } from "@/lib/format";
-import type { DailyPlan, Roadmap } from "@/types/api";
+import { formatDateOnly, todayIso } from "@/lib/format";
+import { dailyPlanStatusLabels } from "@/lib/display-labels";
+import type { DailyPlan, DailyPlanSummary, PageResponse, RoadmapSummary } from "@/types/api";
 
 export function DailyPlansView() {
   const { profile } = useAuth();
   const { show } = useToast();
-  const [plans, setPlans] = useState<DailyPlan[]>([]);
-  const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
+  const [page, setPage] = useState<PageResponse<DailyPlanSummary> | null>(null);
+  const [pageNumber, setPageNumber] = useState(0);
+  const [roadmaps, setRoadmaps] = useState<RoadmapSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
 
@@ -29,17 +31,21 @@ export function DailyPlansView() {
     setLoading(true);
     try {
       const [nextPlans, nextRoadmaps] = await Promise.all([
-        apiRequest<DailyPlan[]>("/api/v1/daily-plans"),
-        apiRequest<Roadmap[]>("/api/v1/roadmaps"),
+        apiRequest<PageResponse<DailyPlanSummary>>(
+          `/api/v1/daily-plans?page=${pageNumber}&size=12&sort=planDate,desc`,
+        ),
+        apiRequest<PageResponse<RoadmapSummary>>(
+          "/api/v1/roadmaps?status=ACTIVE&page=0&size=100&sort=updatedAt,desc",
+        ),
       ]);
-      setPlans([...nextPlans].sort((a, b) => b.planDate.localeCompare(a.planDate)));
-      setRoadmaps(nextRoadmaps.filter((item) => item.status === "ACTIVE"));
+      setPage(nextPlans);
+      setRoadmaps(nextRoadmaps.content);
     } catch (error) {
       show(getErrorMessage(error), "error");
     } finally {
       setLoading(false);
     }
-  }, [show]);
+  }, [pageNumber, show]);
 
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 0);
@@ -68,7 +74,7 @@ export function DailyPlansView() {
         </Button>
       </Card>
 
-      {plans.length === 0 ? (
+      {(page?.content.length ?? 0) === 0 ? (
         <EmptyState
           icon={CalendarDays}
           title="Chưa có kế hoạch ngày"
@@ -82,9 +88,30 @@ export function DailyPlansView() {
         />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {plans.map((plan) => (
+          {(page?.content ?? []).map((plan) => (
             <PlanCard key={plan.id} plan={plan} />
           ))}
+        </div>
+      )}
+      {page && page.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <Button
+            variant="secondary"
+            disabled={page.first}
+            onClick={() => setPageNumber((current) => current - 1)}
+          >
+            Trang trước
+          </Button>
+          <span className="text-xs font-bold text-slate-500">
+            Trang {page.number + 1}/{page.totalPages} · {page.totalElements} kế hoạch
+          </span>
+          <Button
+            variant="secondary"
+            disabled={page.last}
+            onClick={() => setPageNumber((current) => current + 1)}
+          >
+            Trang sau
+          </Button>
         </div>
       )}
 
@@ -103,7 +130,7 @@ export function DailyPlansView() {
   );
 }
 
-function PlanCard({ plan }: { plan: DailyPlan }) {
+function PlanCard({ plan }: { plan: DailyPlanSummary }) {
   const tone =
     plan.status === "COMPLETED"
       ? "emerald"
@@ -122,7 +149,7 @@ function PlanCard({ plan }: { plan: DailyPlan }) {
             </span>
             <div>
               <h3 className="text-base font-black">
-                {formatDate(`${plan.planDate}T00:00:00`, {
+                {formatDateOnly(plan.planDate, {
                   weekday: "long",
                   day: "2-digit",
                   month: "2-digit",
@@ -132,7 +159,7 @@ function PlanCard({ plan }: { plan: DailyPlan }) {
               <p className="mt-0.5 text-xs text-slate-500">{plan.timeZoneSnapshot}</p>
             </div>
           </div>
-          <Badge tone={tone}>{plan.status}</Badge>
+          <Badge tone={tone}>{dailyPlanStatusLabels[plan.status]}</Badge>
         </div>
         <div className="mt-5 grid grid-cols-3 gap-3 rounded-2xl bg-slate-50 p-3 text-xs">
           <span>
@@ -175,7 +202,7 @@ function CreatePlanModal({
   open: boolean;
   onClose: () => void;
   onCreated: () => Promise<void>;
-  roadmaps: Roadmap[];
+  roadmaps: RoadmapSummary[];
   timeZone?: string;
   defaultMinutes: number;
 }) {
@@ -185,6 +212,7 @@ function CreatePlanModal({
   const [minutes, setMinutes] = useState(defaultMinutes);
   const [roadmapId, setRoadmapId] = useState("");
   const [loading, setLoading] = useState(false);
+  const initialDate = todayIso(timeZone);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -214,6 +242,8 @@ function CreatePlanModal({
       onClose={onClose}
       title="Tạo kế hoạch ngày"
       description="Kế hoạch mới bắt đầu ở DRAFT và chưa tự động tạo nhiệm vụ từ lộ trình."
+      closeDisabled={loading}
+      confirmClose={date !== initialDate || minutes !== defaultMinutes || Boolean(roadmapId)}
     >
       <form onSubmit={submit} className="space-y-5">
         <Field label="Ngày học">

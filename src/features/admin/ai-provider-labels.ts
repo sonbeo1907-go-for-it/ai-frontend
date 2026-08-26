@@ -1,4 +1,4 @@
-import type { AiPurpose } from "@/types/api";
+import type { AiProviderProtocol, AiPurpose, CredentialSelectionStrategy } from "@/types/api";
 
 export const AI_PURPOSES: AiPurpose[] = [
   "DOCUMENT_EXTRACTION",
@@ -19,6 +19,14 @@ export const purposeDescriptions: Record<AiPurpose, string> = {
   ROADMAP_GENERATION: "Phân rã mục tiêu và tài liệu thành Master Plan.",
   DAILY_PLAN_GENERATION: "Lập kế hoạch ngày từ lộ trình và tiến độ.",
   DAILY_PLAN_REVIEW: "Đưa ra nhận xét tư vấn cho một phiên bản kế hoạch.",
+};
+
+export const protocolLabels: Record<AiProviderProtocol, string> = {
+  OPENAI_COMPATIBLE: "Tương thích OpenAI",
+};
+
+export const credentialStrategyLabels: Record<CredentialSelectionStrategy, string> = {
+  PRIORITY: "Ưu tiên theo thứ tự",
 };
 
 export const providerPresets = {

@@ -80,7 +80,8 @@ export function AiProviderCredentialForm({
   return (
     <Modal
       open
-      onClose={saving ? () => undefined : onClose}
+      onClose={onClose}
+      closeDisabled={saving}
       title={credential ? "Chỉnh sửa Credential" : `Thêm Credential cho ${provider.displayName}`}
     >
       <form onSubmit={submit} className="grid gap-5">

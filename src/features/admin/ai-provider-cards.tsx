@@ -14,6 +14,7 @@ import {
   Star,
   TestTube2,
 } from "lucide-react";
+import { credentialStrategyLabels, protocolLabels } from "./ai-provider-labels";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -81,13 +82,13 @@ export function ProviderCard({
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
             <span className="rounded-lg bg-slate-100 px-2.5 py-1.5">
-              {provider.protocol.replaceAll("_", " ")}
+              {protocolLabels[provider.protocol]}
             </span>
             <span className="rounded-lg bg-slate-100 px-2.5 py-1.5">
-              Key strategy: {provider.credentialStrategy}
+              Cách chọn khóa: {credentialStrategyLabels[provider.credentialStrategy]}
             </span>
             <span className="rounded-lg bg-slate-100 px-2.5 py-1.5">
-              {configCount} model configuration
+              {configCount} cấu hình mô hình
             </span>
           </div>
         </div>

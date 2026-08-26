@@ -5,7 +5,7 @@ import { ArrowRight, Check, Clock3, Globe2, UserRound } from "lucide-react";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/features/auth/auth-context";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Input } from "@/components/ui/field";
 import type { ProfileResponse } from "@/types/api";
 
 export function ProfileSetupForm() {
@@ -19,7 +19,6 @@ export function ProfileSetupForm() {
   const [form, setForm] = useState({
     displayName: profile?.profile?.displayName || "",
     timeZone: profile?.profile?.timeZone || detected,
-    locale: profile?.profile?.locale || "vi",
     defaultDailyMinutes: profile?.profile?.defaultDailyMinutes || 60,
   });
   const [loading, setLoading] = useState(false);
@@ -30,7 +29,7 @@ export function ProfileSetupForm() {
     try {
       await apiRequest<ProfileResponse>("/api/v1/profile/setup", {
         method: "PUT",
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, locale: "vi" }),
       });
       await refreshProfile();
       router.replace("/onboarding/roadmap");
@@ -91,23 +90,12 @@ export function ProfileSetupForm() {
           <div className="grid size-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-700">
             <Globe2 className="size-6" />
           </div>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Múi giờ" hint={`Trình duyệt nhận diện: ${detected}`}>
-              <Input
-                value={form.timeZone}
-                onChange={(event) => setForm({ ...form, timeZone: event.target.value })}
-              />
-            </Field>
-            <Field label="Ngôn ngữ hệ thống">
-              <Select
-                value={form.locale}
-                onChange={(event) => setForm({ ...form, locale: event.target.value })}
-              >
-                <option value="vi">Tiếng Việt</option>
-                <option value="en">English</option>
-              </Select>
-            </Field>
-          </div>
+          <Field label="Múi giờ" hint={`Trình duyệt nhận diện: ${detected}`}>
+            <Input
+              value={form.timeZone}
+              onChange={(event) => setForm({ ...form, timeZone: event.target.value })}
+            />
+          </Field>
           <Field label="Thời lượng học mặc định">
             <div className="grid grid-cols-3 gap-2">
               {[30, 60, 120].map((minutes) => (

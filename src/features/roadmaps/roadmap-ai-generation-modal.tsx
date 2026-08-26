@@ -44,9 +44,9 @@ export function RoadmapAiGenerationModal({
 
     try {
       const page = await apiRequest<PageResponse<Material>>(
-        "/api/v1/materials?page=0&size=100&sort=createdAt,desc",
+        "/api/v1/materials?status=READY&page=0&size=100&sort=createdAt,desc",
       );
-      setMaterials(page.content.filter((material) => material.status === "READY"));
+      setMaterials(page.content);
     } catch (error) {
       setMaterialsError(getErrorMessage(error));
     } finally {
@@ -92,8 +92,10 @@ export function RoadmapAiGenerationModal({
   return (
     <Modal
       open
-      onClose={busy ? () => undefined : onClose}
+      onClose={onClose}
       width="max-w-2xl"
+      closeDisabled={busy}
+      confirmClose={selectedIds.length > 0 || adjustmentPrompt.trim().length > 0}
       title={isGenerate ? "Sinh lộ trình bằng AI" : "Tái tạo lộ trình bằng AI"}
       description={
         isGenerate

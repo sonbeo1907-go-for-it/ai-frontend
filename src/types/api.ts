@@ -17,8 +17,8 @@ export type AiPurpose =
 export type AiAdjustmentAction = "CARRY_OVER" | "SPLIT" | "RESCHEDULE" | "DROP";
 export type AiExecutionStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
 export type AiExecutionOperation = "GENERATE" | "REGENERATE";
-export type AiExecutionTargetType = "ROADMAP";
-export type AiExecutionResultType = "ROADMAP_VERSION";
+export type AiExecutionTargetType = "ROADMAP" | "DAILY_PLAN";
+export type AiExecutionResultType = "ROADMAP_VERSION" | "DAILY_PLAN_VERSION";
 
 export interface ApiResponse<T> {
   data: T;
@@ -110,12 +110,24 @@ export interface RoadmapVersion {
 }
 export interface Roadmap {
   id: string;
-  version: number;
+  entityVersion: number;
   title: string;
   description?: string;
   status: RoadmapStatus;
   activeVersionId?: string;
   versions: RoadmapVersion[];
+  createdAt: string;
+  updatedAt: string;
+}
+export interface RoadmapSummary {
+  id: string;
+  entityVersion: number;
+  title: string;
+  description?: string;
+  status: RoadmapStatus;
+  activeVersionId?: string;
+  versionCount: number;
+  latestVersionNumber?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -190,6 +202,24 @@ export interface DailyPlan {
   createdAt: string;
   updatedAt: string;
   roadmapId?: string;
+}
+export interface DailyPlanSummary {
+  id: string;
+  planDate: string;
+  timeZoneSnapshot: string;
+  status: DailyPlanStatus;
+  activeVersionId?: string;
+  latestVersionId?: string;
+  availableMinutes: number;
+  totalPlannedMinutes: number;
+  totalItemsCount: number;
+  completedItemsCount: number;
+  partiallyCompletedItemsCount: number;
+  skippedItemsCount: number;
+  completionPercentage: number;
+  roadmapId?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AiProviderConfig {

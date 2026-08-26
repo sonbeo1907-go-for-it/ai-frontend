@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, BookOpen, CalendarClock, Layers3, Plus, Route } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarClock, Layers3, Plus, Route, Search } from "lucide-react";
 import { useToast } from "@/components/providers/toast-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,25 +10,37 @@ import { Field, Input, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { EmptyState, PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
+import { roadmapStatusLabels } from "@/lib/display-labels";
 import { formatDate } from "@/lib/format";
-import type { Roadmap } from "@/types/api";
+import type { PageResponse, Roadmap, RoadmapSummary } from "@/types/api";
 
 export function RoadmapsView() {
   const { show } = useToast();
-  const [roadmaps, setRoadmaps] = useState<Roadmap[]>([]);
+  const [page, setPage] = useState<PageResponse<RoadmapSummary> | null>(null);
+  const [pageNumber, setPageNumber] = useState(0);
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const load = useCallback(async () => {
     await Promise.resolve();
     setLoading(true);
     try {
-      setRoadmaps(await apiRequest<Roadmap[]>("/api/v1/roadmaps"));
+      const parameters = new URLSearchParams({
+        page: String(pageNumber),
+        size: "12",
+        sort: "updatedAt,desc",
+      });
+      if (query) parameters.set("q", query);
+      setPage(
+        await apiRequest<PageResponse<RoadmapSummary>>(`/api/v1/roadmaps?${parameters.toString()}`),
+      );
     } catch (error) {
       show(getErrorMessage(error), "error");
     } finally {
       setLoading(false);
     }
-  }, [show]);
+  }, [pageNumber, query, show]);
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(id);
@@ -67,11 +79,36 @@ export function RoadmapsView() {
           </div>
         </div>
       </Card>
-      {roadmaps.length === 0 ? (
+      <form
+        className="flex max-w-lg gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setPageNumber(0);
+          setQuery(searchInput.trim());
+        }}
+      >
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-3.5 top-3 size-4 text-slate-400" />
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Tìm theo tên hoặc mô tả lộ trình…"
+            className="focus-ring h-10 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm"
+          />
+        </div>
+        <Button type="submit" variant="secondary">
+          Tìm kiếm
+        </Button>
+      </form>
+      {(page?.content.length ?? 0) === 0 ? (
         <EmptyState
           icon={BookOpen}
-          title="Bạn chưa có lộ trình"
-          description="Tạo lộ trình thủ công để thêm cột mốc và chủ đề, hoặc hoàn thành khảo sát cho một mục tiêu cụ thể."
+          title={query ? "Không tìm thấy lộ trình phù hợp" : "Bạn chưa có lộ trình"}
+          description={
+            query
+              ? "Hãy thử một từ khóa khác hoặc xóa nội dung tìm kiếm."
+              : "Tạo lộ trình thủ công hoặc hoàn thành khảo sát cho một mục tiêu cụ thể."
+          }
           action={
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
@@ -81,9 +118,30 @@ export function RoadmapsView() {
         />
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {roadmaps.map((roadmap, index) => (
+          {(page?.content ?? []).map((roadmap, index) => (
             <RoadmapCard key={roadmap.id} roadmap={roadmap} index={index} />
           ))}
+        </div>
+      )}
+      {page && page.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <Button
+            variant="secondary"
+            disabled={page.first}
+            onClick={() => setPageNumber((current) => current - 1)}
+          >
+            Trang trước
+          </Button>
+          <span className="text-xs font-bold text-slate-500">
+            Trang {page.number + 1}/{page.totalPages} · {page.totalElements} lộ trình
+          </span>
+          <Button
+            variant="secondary"
+            disabled={page.last}
+            onClick={() => setPageNumber((current) => current + 1)}
+          >
+            Trang sau
+          </Button>
         </div>
       )}
       <CreateRoadmapModal
@@ -97,9 +155,7 @@ export function RoadmapsView() {
     </div>
   );
 }
-function RoadmapCard({ roadmap, index }: { roadmap: Roadmap; index: number }) {
-  const active = roadmap.versions.find((version) => version.id === roadmap.activeVersionId);
-  const draft = roadmap.versions.find((version) => version.status === "DRAFT");
+function RoadmapCard({ roadmap, index }: { roadmap: RoadmapSummary; index: number }) {
   const colors = [
     "from-indigo-600 to-blue-600",
     "from-emerald-600 to-teal-600",
@@ -117,7 +173,7 @@ function RoadmapCard({ roadmap, index }: { roadmap: Roadmap; index: number }) {
             <span className="grid size-11 place-items-center rounded-2xl bg-slate-100 text-slate-700 group-hover:bg-indigo-50 group-hover:text-indigo-700">
               <BookOpen className="size-5" />
             </span>
-            <Badge tone={statusTone}>{roadmap.status}</Badge>
+            <Badge tone={statusTone}>{roadmapStatusLabels[roadmap.status]}</Badge>
           </div>
           <h3 className="mt-4 line-clamp-2 text-base font-black leading-6 text-slate-950">
             {roadmap.title || "Lộ trình từ khảo sát"}
@@ -129,17 +185,15 @@ function RoadmapCard({ roadmap, index }: { roadmap: Roadmap; index: number }) {
             <div>
               <span className="block text-slate-400">Phiên bản</span>
               <strong className="mt-0.5 block text-slate-800">
-                {roadmap.versions.length || "Chưa có"}
+                {roadmap.versionCount || "Chưa có"}
               </strong>
             </div>
             <div>
               <span className="block text-slate-400">Đang chỉnh sửa</span>
               <strong className="mt-0.5 block text-slate-800">
-                {draft
-                  ? `v${draft.versionNumber}`
-                  : active
-                    ? `ACTIVE v${active.versionNumber}`
-                    : "—"}
+                {roadmap.latestVersionNumber
+                  ? `${roadmap.status === "ACTIVE" ? "ACTIVE " : ""}v${roadmap.latestVersionNumber}`
+                  : "—"}
               </strong>
             </div>
           </div>
@@ -191,6 +245,8 @@ function CreateRoadmapModal({
       onClose={onClose}
       title="Tạo lộ trình thủ công"
       description="Phiên bản đầu tiên bắt đầu ở DRAFT để bạn tự do xây dựng trước khi kích hoạt."
+      closeDisabled={loading}
+      confirmClose={Boolean(title.trim() || description.trim())}
     >
       <form onSubmit={submit} className="space-y-5">
         <Field label="Tên lộ trình">

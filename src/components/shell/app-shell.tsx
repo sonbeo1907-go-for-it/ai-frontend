@@ -47,7 +47,7 @@ const pageMetadata: Record<string, { title: string; subtitle: string }> = {
   },
   "/profile": {
     title: "Hồ sơ cá nhân",
-    subtitle: "Thiết lập múi giờ, ngôn ngữ và thời lượng học mặc định.",
+    subtitle: "Thiết lập múi giờ và thời lượng học mặc định.",
   },
 };
 

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Archive,
   CircleAlert,
@@ -20,13 +20,16 @@ import { Modal } from "@/components/ui/modal";
 import { EmptyState, PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatBytes, formatDate } from "@/lib/format";
-import type { Material, MaterialType, PageResponse } from "@/types/api";
+import type { Material, MaterialStatus, MaterialType, PageResponse } from "@/types/api";
 
 export function MaterialsView() {
   const { show } = useToast();
   const [page, setPage] = useState<PageResponse<Material> | null>(null);
   const [pageNumber, setPageNumber] = useState(0);
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<MaterialType | "">("");
+  const [statusFilter, setStatusFilter] = useState<MaterialStatus | "">("");
   const [open, setOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<Material | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,34 +37,40 @@ export function MaterialsView() {
     await Promise.resolve();
     setLoading(true);
     try {
+      const parameters = new URLSearchParams({
+        page: String(pageNumber),
+        size: "12",
+        sort: "createdAt,desc",
+      });
+      if (query) parameters.set("q", query);
+      if (typeFilter) parameters.set("type", typeFilter);
+      if (statusFilter) parameters.set("status", statusFilter);
       setPage(
-        await apiRequest<PageResponse<Material>>(
-          `/api/v1/materials?page=${pageNumber}&size=12&sort=createdAt,desc`,
-        ),
+        await apiRequest<PageResponse<Material>>(`/api/v1/materials?${parameters.toString()}`),
       );
     } catch (error) {
       show(getErrorMessage(error), "error");
     } finally {
       setLoading(false);
     }
-  }, [pageNumber, show]);
+  }, [pageNumber, query, show, statusFilter, typeFilter]);
   useEffect(() => {
     const id = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(id);
   }, [load]);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setPageNumber(0);
+      setQuery(search.trim());
+    }, 350);
+    return () => window.clearTimeout(id);
+  }, [search]);
   useEffect(() => {
     if (!page?.content.some((item) => item.status === "PENDING" || item.status === "PROCESSING"))
       return;
     const id = window.setInterval(() => void load(), 4000);
     return () => window.clearInterval(id);
   }, [page, load]);
-  const filtered = useMemo(
-    () =>
-      (page?.content ?? []).filter((item) =>
-        (item.originalFileName || item.type).toLowerCase().includes(search.toLowerCase()),
-      ),
-    [page, search],
-  );
   async function archive() {
     if (!archiveTarget) return;
     try {
@@ -95,15 +104,44 @@ export function MaterialsView() {
           Thêm tài liệu
         </Button>
       </Card>
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
         <div className="relative w-full sm:max-w-sm">
           <Search className="absolute left-3.5 top-3 size-4 text-slate-400" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Tìm theo tên tệp hoặc loại…"
+            placeholder="Tìm theo tên tệp hoặc nội dung…"
             className="focus-ring h-10 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm"
           />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Select
+            aria-label="Lọc loại tài liệu"
+            value={typeFilter}
+            onChange={(event) => {
+              setPageNumber(0);
+              setTypeFilter(event.target.value as MaterialType | "");
+            }}
+          >
+            <option value="">Tất cả loại</option>
+            <option value="FILE">Tệp tải lên</option>
+            <option value="TEXT">Văn bản</option>
+            <option value="GOAL_DESCRIPTION">Mục tiêu học tập</option>
+          </Select>
+          <Select
+            aria-label="Lọc trạng thái tài liệu"
+            value={statusFilter}
+            onChange={(event) => {
+              setPageNumber(0);
+              setStatusFilter(event.target.value as MaterialStatus | "");
+            }}
+          >
+            <option value="">Tất cả trạng thái</option>
+            <option value="PENDING">Chờ xử lý</option>
+            <option value="PROCESSING">Đang trích xuất</option>
+            <option value="READY">Sẵn sàng</option>
+            <option value="FAILED">Thất bại</option>
+          </Select>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold text-slate-500">
@@ -118,7 +156,7 @@ export function MaterialsView() {
           </button>
         </div>
       </div>
-      {filtered.length === 0 ? (
+      {(page?.content.length ?? 0) === 0 ? (
         <EmptyState
           icon={Files}
           title="Kho tài liệu đang trống"
@@ -132,7 +170,7 @@ export function MaterialsView() {
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((material) => (
+          {(page?.content ?? []).map((material) => (
             <MaterialCard
               key={material.id}
               material={material}
@@ -292,15 +330,21 @@ function CreateMaterialModal({
       onClose={onClose}
       title="Thêm tài liệu học tập"
       description="Tài liệu tải lên được xem là dữ liệu không đáng tin cậy, không phải chỉ dẫn cho AI."
+      closeDisabled={loading}
+      confirmClose={Boolean(file || content.trim())}
     >
       <div className="mb-6 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
         <button
+          type="button"
+          aria-pressed={mode === "file"}
           onClick={() => setMode("file")}
           className={`rounded-lg py-2.5 text-sm font-bold ${mode === "file" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}
         >
           Tải tệp
         </button>
         <button
+          type="button"
+          aria-pressed={mode === "text"}
           onClick={() => setMode("text")}
           className={`rounded-lg py-2.5 text-sm font-bold ${mode === "text" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}
         >

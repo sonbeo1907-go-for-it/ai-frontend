@@ -25,6 +25,11 @@ import { Modal } from "@/components/ui/modal";
 import { PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
+import {
+  roadmapStatusLabels,
+  versionOriginLabels,
+  versionStatusLabels,
+} from "@/lib/display-labels";
 import type { Roadmap, RoadmapItem, RoadmapVersion } from "@/types/api";
 import {
   RoadmapAiGenerationModal,
@@ -42,6 +47,7 @@ export function RoadmapDetailView() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [milestoneOpen, setMilestoneOpen] = useState(false);
+  const [metadataOpen, setMetadataOpen] = useState(false);
   const [aiMode, setAiMode] = useState<"generate" | "regenerate" | null>(null);
   const [aiError, setAiError] = useState("");
   const [topicParent, setTopicParent] = useState<RoadmapItem | null>(null);
@@ -91,6 +97,7 @@ export function RoadmapDetailView() {
     active: aiActive,
     generate: generateWithAi,
     regenerate: regenerateWithAi,
+    refreshStatus: refreshAiStatus,
     dismissFailure: dismissAiFailure,
   } = useRoadmapAiExecution(id, handleAiSucceeded);
   const version = useMemo(
@@ -128,6 +135,24 @@ export function RoadmapDetailView() {
         ? "Đã tạo bản DRAFT mới từ phiên bản đang hoạt động."
         : "Đã tạo phiên bản nội dung đầu tiên.",
     );
+  }
+  async function updateMetadata(values: { title: string; description: string }) {
+    if (!roadmap) return;
+    try {
+      const updated = await apiRequest<Roadmap>(`/api/v1/roadmaps/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...values,
+          entityVersion: roadmap.entityVersion,
+        }),
+      });
+      setRoadmap(updated);
+      setMetadataOpen(false);
+      show("Tên và mô tả lộ trình đã được cập nhật.");
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+      await load();
+    }
   }
   function openAiModal(mode: "generate" | "regenerate") {
     setAiError("");
@@ -203,7 +228,7 @@ export function RoadmapDetailView() {
             <div className="max-w-3xl">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={roadmap.status === "ACTIVE" ? "emerald" : "indigo"}>
-                  {roadmap.status}
+                  {roadmapStatusLabels[roadmap.status]}
                 </Badge>
                 <span className="text-xs text-slate-400">
                   Cập nhật {formatDate(roadmap.updatedAt)}
@@ -218,6 +243,12 @@ export function RoadmapDetailView() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {roadmap.status !== "ARCHIVED" && roadmap.status !== "ONBOARDING" && (
+                <Button variant="secondary" onClick={() => setMetadataOpen(true)}>
+                  <Edit3 className="size-4" />
+                  Sửa thông tin
+                </Button>
+              )}
               {editable && (
                 <Button variant="secondary" onClick={() => openAiModal("regenerate")}>
                   <Sparkles className="size-4 text-indigo-600" />
@@ -271,6 +302,7 @@ export function RoadmapDetailView() {
         execution={aiExecution}
         recovering={aiRecovering}
         pollingError={aiPollingError}
+        onRefresh={refreshAiStatus}
         onDismiss={dismissAiFailure}
       />
       <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">
@@ -298,11 +330,11 @@ export function RoadmapDetailView() {
                             : "slate"
                       }
                     >
-                      {item.status}
+                      {versionStatusLabels[item.status]}
                     </Badge>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">
-                    {formatDate(item.createdAt)} · {item.origin}
+                    {formatDate(item.createdAt)} · {versionOriginLabels[item.origin]}
                   </p>
                 </button>
               ))
@@ -362,6 +394,15 @@ export function RoadmapDetailView() {
           submissionError={aiError}
           onClose={closeAiModal}
           onSubmit={(input) => void submitAi(input)}
+        />
+      )}
+
+      {metadataOpen && (
+        <RoadmapMetadataModal
+          open
+          roadmap={roadmap}
+          onClose={() => setMetadataOpen(false)}
+          onSave={updateMetadata}
         />
       )}
 
@@ -429,6 +470,7 @@ export function RoadmapDetailView() {
       <Modal
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
+        closeDisabled={busy}
         title={`Xóa ${deleteTarget?.itemType === "MILESTONE" ? "cột mốc" : "chủ đề"}?`}
         description={
           deleteTarget?.itemType === "MILESTONE"
@@ -447,6 +489,77 @@ export function RoadmapDetailView() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+function RoadmapMetadataModal({
+  open,
+  roadmap,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  roadmap: Roadmap;
+  onClose: () => void;
+  onSave: (values: { title: string; description: string }) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(roadmap.title ?? "");
+  const [description, setDescription] = useState(roadmap.description ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        title: title.trim(),
+        description: description.trim(),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const changed =
+    title.trim() !== (roadmap.title ?? "") || description.trim() !== (roadmap.description ?? "");
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Chỉnh sửa thông tin lộ trình"
+      description="Tên và mô tả được dùng để phân biệt các mục tiêu học tập của bạn."
+      closeDisabled={saving}
+      confirmClose={changed}
+    >
+      <form onSubmit={submit} className="space-y-5">
+        <Field label="Tên lộ trình">
+          <Input
+            autoFocus
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={200}
+            required
+          />
+        </Field>
+        <Field label="Mô tả" hint="Không bắt buộc · tối đa 4.000 ký tự">
+          <Textarea
+            rows={4}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={4000}
+          />
+        </Field>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button type="submit" loading={saving} disabled={!title.trim() || !changed}>
+            Lưu thay đổi
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -624,7 +737,18 @@ function ItemModal({
     }
   }
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={title}
+      closeDisabled={loading}
+      confirmClose={
+        name !== (initial?.title ?? "") ||
+        description !== (initial?.description ?? "") ||
+        orderIndex !== (initial?.orderIndex ?? nextOrder) ||
+        (itemType === "TOPIC" && minutes !== (initial?.estimatedMinutes ?? 60))
+      }
+    >
       <form onSubmit={submit} className="space-y-5">
         <Field label="Tên">
           <Input

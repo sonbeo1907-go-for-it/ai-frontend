@@ -16,6 +16,7 @@ import {
 } from "./roadmap-ai-execution-api";
 
 const POLL_INTERVAL_MS = 2_000;
+const MAX_POLL_INTERVAL_MS = 30_000;
 
 type SuccessfulExecutionHandler = (
   resultId: string,
@@ -32,6 +33,8 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
   const [recovering, setRecovering] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [pollingError, setPollingError] = useState("");
+  const [recoveryRefreshToken, setRecoveryRefreshToken] = useState(0);
+  const [pollingRefreshToken, setPollingRefreshToken] = useState(0);
   const submissionIntentRef = useRef<SubmissionIntent | null>(null);
   const handledTerminalExecutionsRef = useRef(new Set<string>());
   const onSucceededRef = useRef(onSucceeded);
@@ -88,16 +91,35 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
     return () => {
       cancelled = true;
     };
-  }, [acceptExecution, roadmapId]);
+  }, [acceptExecution, recoveryRefreshToken, roadmapId]);
+
+  const activeExecutionId = execution && isActiveAiExecution(execution) ? execution.id : null;
 
   useEffect(() => {
-    if (!execution || !isActiveAiExecution(execution)) return;
+    if (!activeExecutionId) return;
 
-    const executionId = execution.id;
+    const executionId = activeExecutionId;
     let cancelled = false;
     let timeoutId: number | undefined;
+    let consecutiveFailures = 0;
+    let requestInFlight = false;
+
+    function clearScheduledPoll() {
+      if (timeoutId === undefined) return;
+      window.clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+
+    function scheduleNextPoll(delayMs: number) {
+      clearScheduledPoll();
+      if (cancelled || document.visibilityState === "hidden") return;
+      timeoutId = window.setTimeout(() => void poll(), delayMs);
+    }
 
     async function poll() {
+      if (cancelled || requestInFlight || document.visibilityState === "hidden") return;
+      requestInFlight = true;
+
       try {
         const nextExecution = await getAiExecution(executionId);
         if (cancelled) return;
@@ -111,24 +133,50 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
 
         setExecution(nextExecution);
         setPollingError("");
-        if (isActiveAiExecution(nextExecution)) scheduleNextPoll();
+        consecutiveFailures = 0;
+        if (isActiveAiExecution(nextExecution)) {
+          scheduleNextPoll(POLL_INTERVAL_MS);
+        }
       } catch (error) {
         if (cancelled) return;
+
+        consecutiveFailures += 1;
         setPollingError(getErrorMessage(error));
-        scheduleNextPoll();
+        const retryDelay = Math.min(
+          POLL_INTERVAL_MS * 2 ** (consecutiveFailures - 1),
+          MAX_POLL_INTERVAL_MS,
+        );
+        scheduleNextPoll(retryDelay);
+      } finally {
+        requestInFlight = false;
       }
     }
 
-    function scheduleNextPoll() {
-      timeoutId = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
+    function handleVisibilityChange() {
+      const hidden = document.visibilityState === "hidden";
+
+      if (hidden) {
+        clearScheduledPoll();
+        return;
+      }
+
+      consecutiveFailures = 0;
+      void poll();
     }
 
-    scheduleNextPoll();
+    const initiallyHidden = document.visibilityState === "hidden";
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    if (!initiallyHidden) {
+      scheduleNextPoll(pollingRefreshToken > 0 ? 0 : POLL_INTERVAL_MS);
+    }
+
     return () => {
       cancelled = true;
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      clearScheduledPoll();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [execution, roadmapId]);
+  }, [activeExecutionId, pollingRefreshToken, roadmapId]);
 
   useEffect(() => {
     if (!execution || isActiveAiExecution(execution)) return;
@@ -204,6 +252,15 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
     setPollingError("");
   }, [execution, roadmapId]);
 
+  const refreshStatus = useCallback(() => {
+    setPollingError("");
+    if (execution && isActiveAiExecution(execution)) {
+      setPollingRefreshToken((current) => current + 1);
+      return;
+    }
+    setRecoveryRefreshToken((current) => current + 1);
+  }, [execution]);
+
   return {
     execution,
     recovering,
@@ -212,6 +269,7 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
     active: Boolean(execution && isActiveAiExecution(execution)),
     generate,
     regenerate,
+    refreshStatus,
     dismissFailure,
   };
 }
