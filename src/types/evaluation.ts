@@ -16,6 +16,7 @@ export interface QuizQuestion {
   roadmapItemId?: string;
   questionText: string;
   options: QuizOption[];
+  correctOption?: string;
   userAnswer?: string;
   isCorrect?: boolean;
   explanation?: string;

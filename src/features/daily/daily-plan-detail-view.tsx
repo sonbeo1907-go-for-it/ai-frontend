@@ -40,7 +40,10 @@ import type {
   DailyPlanVersion,
   DailyTaskCategory,
   ProgressEntryStatus,
+  DailyEvaluation,
 } from "@/types/api";
+import { DailyMicroQuizModal } from "@/features/evaluations/daily-micro-quiz-modal";
+import { getDailyEvaluation } from "@/features/evaluations/evaluation-api";
 import { DailyPlanAiExecutionStatus } from "./daily-plan-ai-execution-status";
 import { PomodoroModal } from "./pomodoro-modal";
 import { useDailyPlanAiExecution } from "./use-daily-plan-ai-execution";
@@ -76,16 +79,20 @@ export function DailyPlanDetailView() {
   const [editTaskTarget, setEditTaskTarget] = useState<DailyPlanItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DailyPlanItem | null>(null);
   const [pomodoro, setPomodoro] = useState<{ open: boolean; taskId?: string }>({ open: false });
+  const [quizModalOpen, setQuizModalOpen] = useState(false);
+  const [evaluation, setEvaluation] = useState<DailyEvaluation | null>(null);
   const load = useCallback(async () => {
     await Promise.resolve();
     setLoading(true);
     try {
-      const [nextPlan, nextVersions] = await Promise.all([
+      const [nextPlan, nextVersions, nextEvaluation] = await Promise.all([
         apiRequest<DailyPlan>(`/api/v1/daily-plans/${id}`),
         apiRequest<DailyPlanVersion[]>(`/api/v1/daily-plans/${id}/versions`),
+        getDailyEvaluation(id).catch(() => null),
       ]);
       setPlan(nextPlan);
       setVersions(nextVersions);
+      setEvaluation(nextEvaluation);
       setSelectedId((current) =>
         current && nextVersions.some((item) => item.id === current)
           ? current
@@ -334,6 +341,17 @@ export function DailyPlanDetailView() {
                   Pomodoro
                 </Button>
               )}
+              {items.some((item) => item.status === "COMPLETED") && (
+                <Button
+                  onClick={() => setQuizModalOpen(true)}
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 border-none shadow-[0_0_15px_rgba(245,158,11,0.35)]"
+                >
+                  <Sparkles className="size-4" />
+                  {evaluation?.quizScore != null
+                    ? `Xem lại Quiz (${evaluation.quizScore}%)`
+                    : "Làm Micro-Quiz cuối ngày"}
+                </Button>
+              )}
             </div>
           </div>
           {aiGenerationUnavailableReason && (
@@ -342,7 +360,7 @@ export function DailyPlanDetailView() {
               <p>{aiGenerationUnavailableReason}</p>
             </div>
           )}
-          <div className="mt-7 grid gap-4 sm:grid-cols-3">
+          <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Tiến độ" value={`${completion}%`}>
               <ProgressBar value={completion} />
             </Metric>
@@ -354,6 +372,21 @@ export function DailyPlanDetailView() {
               label="Thời lượng dự kiến"
               value={`${version?.totalPlannedMinutes ?? 0} phút`}
             />
+            {evaluation?.quizScore != null ? (
+              <Metric label="Micro-Quiz cuối ngày" value={`${evaluation.quizScore}%`}>
+                <Badge tone={evaluation.quizPassed ? "emerald" : "rose"}>
+                  {evaluation.quizPassed ? "Đạt (≥ 80%)" : "Chưa đạt"}
+                </Badge>
+              </Metric>
+            ) : (
+              <Metric label="Micro-Quiz cuối ngày" value="Chưa làm">
+                {items.some((item) => item.status === "COMPLETED") ? (
+                  <span className="text-xs font-semibold text-amber-600">Sẵn sàng làm bài</span>
+                ) : (
+                  <span className="text-xs font-medium text-slate-400">Cần hoàn thành task</span>
+                )}
+              </Metric>
+            )}
           </div>
         </div>
       </Card>
@@ -567,6 +600,12 @@ export function DailyPlanDetailView() {
           </Button>
         </div>
       </Modal>
+      <DailyMicroQuizModal
+        dailyPlanId={id}
+        open={quizModalOpen}
+        onClose={() => setQuizModalOpen(false)}
+        onQuizSubmitted={() => void load()}
+      />
     </div>
   );
 }
