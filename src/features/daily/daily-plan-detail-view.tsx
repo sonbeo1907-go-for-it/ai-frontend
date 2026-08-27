@@ -161,6 +161,12 @@ export function DailyPlanDetailView() {
     0,
   );
   const completion = items.length ? Math.round((earned / items.length) * 10) / 10 : 0;
+
+  const reviewMinutes = items
+    .filter((item) => item.category === "REVIEW")
+    .reduce((sum, item) => sum + (item.plannedMinutes ?? 30), 0);
+  const availableMinutes = version?.availableMinutes ?? plan?.availableMinutes ?? 120;
+  const reviewPercentage = availableMinutes > 0 ? Math.round((reviewMinutes / availableMinutes) * 100) : 0;
   async function action(run: () => Promise<unknown>, message: string) {
     setBusy(true);
     try {
@@ -360,9 +366,31 @@ export function DailyPlanDetailView() {
               <p>{aiGenerationUnavailableReason}</p>
             </div>
           )}
-          <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <Metric label="Tiến độ" value={`${completion}%`}>
               <ProgressBar value={completion} />
+            </Metric>
+            <Metric label="Ôn tập (Review)" value={`${reviewPercentage}%`}>
+              <div className="mt-1 flex flex-col gap-2">
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-slate-100"
+                  role="progressbar"
+                >
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      reviewPercentage > 40
+                        ? "bg-gradient-to-r from-rose-500 to-rose-400"
+                        : reviewPercentage < 20
+                          ? "bg-gradient-to-r from-amber-500 to-amber-400"
+                          : "bg-gradient-to-r from-indigo-500 to-purple-500"
+                    }`}
+                    style={{ width: `${Math.max(0, Math.min(100, reviewPercentage))}%` }}
+                  />
+                </div>
+                <span className="text-[11px] font-semibold leading-none text-slate-500">
+                  {reviewMinutes} / {availableMinutes} phút
+                </span>
+              </div>
             </Metric>
             <Metric
               label="Nhiệm vụ"
@@ -658,21 +686,39 @@ function TaskCard({
   const Icon = status.icon;
   const adjustment = item.aiAdjustmentAction ? getAdjustmentDisplay(item.aiAdjustmentAction) : null;
   return (
-    <Card className={`p-4 sm:p-5 ${item.status === "COMPLETED" ? "bg-emerald-50/30" : ""}`}>
+    <Card
+      className={`p-4 sm:p-5 transition-all duration-300 ${
+        item.status === "COMPLETED" ? "bg-emerald-50/30" : ""
+      } ${
+        item.category === "REVIEW"
+          ? "border-purple-200/80 shadow-[0_4px_20px_-4px_rgba(168,85,247,0.15)] ring-1 ring-purple-100/50"
+          : ""
+      }`}
+    >
       <div className="flex items-start gap-3">
         <span
-          className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl ${item.status === "COMPLETED" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}
+          className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl ${
+            item.status === "COMPLETED" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
+          }`}
         >
           <Icon className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3
-              className={`text-sm font-extrabold ${item.status === "COMPLETED" ? "text-slate-500 line-through" : "text-slate-950"}`}
+              className={`text-sm font-extrabold ${
+                item.status === "COMPLETED" ? "text-slate-500 line-through" : "text-slate-950"
+              }`}
             >
               {item.title}
             </h3>
             <Badge tone={status.tone}>{status.label}</Badge>
+            {item.category === "REVIEW" && (
+              <Badge className="border-purple-200 bg-purple-50 text-purple-700 shadow-sm shadow-purple-100/50">
+                <Sparkles className="mr-1 inline-block size-3" />
+                Ôn tập
+              </Badge>
+            )}
             {adjustment && (
               <Badge tone={adjustment.tone}>
                 <Sparkles className="mr-1 inline-block size-3" />

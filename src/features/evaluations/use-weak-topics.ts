@@ -23,26 +23,24 @@ export function useWeakTopics(roadmapId: string) {
 
   useEffect(() => {
     let mounted = true;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const data = await getRoadmapWeakTopics(roadmapId);
-          if (mounted) {
-            setWeakTopics(data || []);
-            setLoading(false);
-          }
-        } catch (err) {
-          if (mounted) {
-            setError(getErrorMessage(err));
-            setLoading(false);
-          }
+    
+    void (async () => {
+      try {
+        const data = await getRoadmapWeakTopics(roadmapId);
+        if (mounted) {
+          setWeakTopics(data || []);
+          setLoading(false);
         }
-      })();
-    }, 0);
+      } catch (err) {
+        if (mounted) {
+          setError(getErrorMessage(err));
+          setLoading(false);
+        }
+      }
+    })();
 
     return () => {
       mounted = false;
-      window.clearTimeout(timer);
     };
   }, [roadmapId]);
 
