@@ -13,7 +13,6 @@ import {
   History,
   Lightbulb,
   PlusCircle,
-  RotateCcw,
   Save,
   Sparkles,
   Star,

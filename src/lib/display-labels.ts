@@ -1,4 +1,11 @@
-import type { DailyPlanStatus, DailyTaskCategory, RoadmapStatus, VersionStatus } from "@/types/api";
+import type {
+  DailyPlanStatus,
+  DailyTaskCategory,
+  RoadmapStatus,
+  VersionStatus,
+  WeakTopicStatus,
+  WeakTopicTrigger,
+} from "@/types/api";
 
 export type VersionOrigin = "MANUAL" | "USER_EDITED" | "AI_GENERATED" | "AI_REGENERATED";
 
@@ -36,3 +43,25 @@ export const dailyTaskCategoryLabels: Record<DailyTaskCategory, string> = {
   PRACTICE: "Thực hành",
   CUSTOM: "Tùy chỉnh",
 };
+
+export const weakTopicStatusLabels: Record<WeakTopicStatus, string> = {
+  UNRESOLVED: "Chưa khắc phục",
+  IN_REVIEW: "Đang ôn tập",
+  MASTERED: "Đã thành thạo",
+};
+
+export const weakTopicStatusTones: Record<
+  WeakTopicStatus,
+  "slate" | "indigo" | "emerald" | "amber" | "rose" | "sky"
+> = {
+  UNRESOLVED: "rose",
+  IN_REVIEW: "indigo",
+  MASTERED: "emerald",
+};
+
+export const weakTopicTriggerLabels: Record<WeakTopicTrigger, string> = {
+  QUIZ_FAILED: "Điểm Quiz < 80%",
+  LOW_RATING: "Tự đánh giá ≤ 2 sao",
+  BOTH: "Quiz & Tự đánh giá thấp",
+};
+

@@ -37,6 +37,7 @@ import {
 } from "./roadmap-ai-generation-modal";
 import { RoadmapAiExecutionStatus } from "./roadmap-ai-execution-status";
 import { useRoadmapAiExecution } from "./use-roadmap-ai-execution";
+import { WeakTopicsView } from "@/features/evaluations/weak-topics-view";
 
 export function RoadmapDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -386,6 +387,8 @@ export function RoadmapDetailView() {
           )}
         </div>
       </div>
+
+      <WeakTopicsView roadmapId={id} />
 
       {aiMode && (
         <RoadmapAiGenerationModal
