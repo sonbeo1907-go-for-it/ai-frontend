@@ -536,6 +536,7 @@ function RoadmapMetadataModal({
         <Field label="Tên lộ trình">
           <Input
             autoFocus
+            data-modal-initial-focus
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             maxLength={200}
