@@ -602,6 +602,7 @@ export function DailyPlanDetailView() {
       </Modal>
       <DailyMicroQuizModal
         dailyPlanId={id}
+        dailyPlanVersionId={plan?.activeVersionId}
         open={quizModalOpen}
         onClose={() => setQuizModalOpen(false)}
         onQuizSubmitted={() => void load()}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -10,10 +10,9 @@ import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
-  History,
   Lightbulb,
-  PlusCircle,
-  RotateCcw,
+  LoaderCircle,
+  RefreshCw,
   Save,
   Sparkles,
   Star,
@@ -28,16 +27,18 @@ import { PageLoading } from "@/components/ui/states";
 import { useToast } from "@/components/providers/toast-provider";
 import { getErrorMessage } from "@/lib/api-client";
 import {
-  generateDailyQuiz,
-  getAllDailyQuizzes,
+  getDailyQuiz,
   getDailyEvaluation,
+  getAllDailyQuizzes,
   submitDailyQuiz,
   submitSelfEvaluation,
 } from "./evaluation-api";
+import { useDailyQuizAiExecution } from "./use-daily-quiz-ai-execution";
 import type { QuizDetail, QuizQuestion } from "@/types/api";
 
 interface DailyMicroQuizModalProps {
   dailyPlanId: string;
+  dailyPlanVersionId?: string;
   open: boolean;
   onClose: () => void;
   onQuizSubmitted?: (quiz: QuizDetail) => void;
@@ -45,6 +46,7 @@ interface DailyMicroQuizModalProps {
 
 export function DailyMicroQuizModal({
   dailyPlanId,
+  dailyPlanVersionId,
   open,
   onClose,
   onQuizSubmitted,
@@ -52,12 +54,8 @@ export function DailyMicroQuizModal({
   const { show } = useToast();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [generatingNew, setGeneratingNew] = useState(false);
   const [savingSelfEval, setSavingSelfEval] = useState(false);
-
-  // Multiple Quizzes State
-  const [quizzes, setQuizzes] = useState<QuizDetail[]>([]);
-  const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
+  const [currentQuiz, setCurrentQuiz] = useState<QuizDetail | null>(null);
 
   // Active Question & Selection State
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -68,6 +66,23 @@ export function DailyMicroQuizModal({
   const [feedbackNote, setFeedbackNote] = useState<string>("");
   const [selfEvalSaved, setSelfEvalSaved] = useState(false);
 
+  const handleGenerationSucceeded = useCallback(
+    async (quizId: string) => {
+      const quiz = await getDailyQuiz(dailyPlanId, quizId);
+      setCurrentQuiz(quiz);
+      setCurrentIndex(0);
+      setSelectedAnswers({});
+      show("AI đã tạo xong Micro-Quiz.");
+    },
+    [dailyPlanId, show],
+  );
+
+  const quizExecution = useDailyQuizAiExecution(
+    dailyPlanId,
+    open && Boolean(dailyPlanVersionId),
+    handleGenerationSucceeded,
+  );
+
   useEffect(() => {
     if (!open || !dailyPlanId) return;
 
@@ -76,22 +91,18 @@ export function DailyMicroQuizModal({
       setLoading(true);
       try {
         // 1. Fetch all existing quizzes for this daily plan
-        let existingList = await getAllDailyQuizzes(dailyPlanId).catch(() => []);
+        const quizzes = await getAllDailyQuizzes(dailyPlanId);
+        const existingQuiz = dailyPlanVersionId
+          ? (quizzes.find((quiz) => quiz.dailyPlanVersionId === dailyPlanVersionId) ?? null)
+          : null;
 
-        // 2. If no quiz exists yet, call AI to generate the first one
-        if (!existingList || existingList.length === 0) {
-          const firstQuiz = await generateDailyQuiz(dailyPlanId);
-          existingList = [firstQuiz];
-        }
-
-        if (active && existingList.length > 0) {
-          setQuizzes(existingList);
-          const defaultQuiz = existingList[0];
-          setSelectedQuizId(defaultQuiz.id);
+        if (active) {
+          setCurrentQuiz(existingQuiz);
+          const defaultQuiz = existingQuiz;
           setCurrentIndex(0);
 
           // If submitted, prefill answers
-          if (defaultQuiz.status === "SUBMITTED") {
+          if (defaultQuiz?.status === "SUBMITTED") {
             const prefilled: Record<string, string> = {};
             defaultQuiz.questions.forEach((q) => {
               if (q.userAnswer) prefilled[q.id] = q.userAnswer;
@@ -104,10 +115,10 @@ export function DailyMicroQuizModal({
           // Fetch self-evaluation
           try {
             const evalRes = await getDailyEvaluation(dailyPlanId);
-            if (active && evalRes) {
-              if (evalRes.overallRating) setRating(evalRes.overallRating);
-              if (evalRes.feedbackNote) setFeedbackNote(evalRes.feedbackNote);
-              if (evalRes.overallRating != null) setSelfEvalSaved(true);
+            if (active) {
+              setRating(evalRes?.overallRating ?? 4);
+              setFeedbackNote(evalRes?.feedbackNote ?? "");
+              setSelfEvalSaved(evalRes?.overallRating != null);
             }
           } catch {
             // Ignore evaluation fetch error
@@ -116,7 +127,6 @@ export function DailyMicroQuizModal({
       } catch (error) {
         if (active) {
           show(getErrorMessage(error), "error");
-          onClose();
         }
       } finally {
         if (active) {
@@ -130,45 +140,19 @@ export function DailyMicroQuizModal({
     return () => {
       active = false;
     };
-  }, [open, dailyPlanId, show, onClose]);
+  }, [open, dailyPlanId, dailyPlanVersionId, show]);
 
-  // When switching between quiz attempts
-  const handleSelectQuiz = (quizId: string) => {
-    const target = quizzes.find((q) => q.id === quizId);
-    if (!target) return;
-    setSelectedQuizId(quizId);
-    setCurrentIndex(0);
-    if (target.status === "SUBMITTED") {
-      const prefilled: Record<string, string> = {};
-      target.questions.forEach((q) => {
-        if (q.userAnswer) prefilled[q.id] = q.userAnswer;
-      });
-      setSelectedAnswers(prefilled);
-    } else {
-      setSelectedAnswers({});
-    }
-  };
-
-  const handleCreateNewQuiz = async () => {
-    if (generatingNew) return;
-    setGeneratingNew(true);
+  const handleGenerate = async () => {
+    if (quizExecution.submitting || quizExecution.active) return;
     try {
-      const newQuiz = await generateDailyQuiz(dailyPlanId, true);
-      setQuizzes((prev) => [newQuiz, ...prev.filter((q) => q.id !== newQuiz.id)]);
-      setSelectedQuizId(newQuiz.id);
-      setCurrentIndex(0);
-      setSelectedAnswers({});
-      show("Đã tạo bộ câu hỏi Micro-Quiz mới thành công!");
+      await quizExecution.generate();
     } catch (error) {
       show(getErrorMessage(error), "error");
-    } finally {
-      setGeneratingNew(false);
     }
   };
 
   if (!open) return null;
 
-  const currentQuiz = quizzes.find((q) => q.id === selectedQuizId) || quizzes[0];
   const questions = currentQuiz?.questions ?? [];
   const currentQuestion: QuizQuestion | undefined = questions[currentIndex];
   const isSubmitted = currentQuiz?.status === "SUBMITTED";
@@ -187,10 +171,10 @@ export function DailyMicroQuizModal({
     if (!currentQuiz || submitting || isSubmitted) return;
 
     if (answeredCount < totalQuestions) {
-      const confirmSubmit = window.confirm(
-        `Bạn mới trả lời ${answeredCount}/${totalQuestions} câu hỏi. Bạn có chắc chắn muốn nộp bài?`,
-      );
-      if (!confirmSubmit) return;
+      const firstUnansweredIndex = questions.findIndex((question) => !selectedAnswers[question.id]);
+      if (firstUnansweredIndex >= 0) setCurrentIndex(firstUnansweredIndex);
+      show(`Bạn cần trả lời đủ ${totalQuestions} câu trước khi nộp bài.`, "error");
+      return;
     }
 
     setSubmitting(true);
@@ -198,13 +182,12 @@ export function DailyMicroQuizModal({
       const payload = {
         answers: questions.map((q) => ({
           questionId: q.id,
-          selectedOption: selectedAnswers[q.id] || "",
+          selectedOption: selectedAnswers[q.id],
         })),
       };
 
       const result = await submitDailyQuiz(dailyPlanId, currentQuiz.id, payload);
-      setQuizzes((prev) => prev.map((q) => (q.id === result.id ? result : q)));
-      setSelectedQuizId(result.id);
+      setCurrentQuiz(result);
       show("Đã nộp bài đánh giá thành công!");
       if (onQuizSubmitted) {
         onQuizSubmitted(result);
@@ -251,76 +234,58 @@ export function DailyMicroQuizModal({
       description={
         isSubmitted
           ? "Phân tích điểm mạnh, điểm yếu và kế hoạch cải thiện kiến thức theo từng bài kiểm tra."
-          : `Bài kiểm tra nhanh ${totalQuestions} câu hỏi trắc nghiệm · Cần đạt tối thiểu 80% để vượt qua.`
+          : currentQuiz
+            ? `Bài kiểm tra nhanh ${totalQuestions} câu hỏi trắc nghiệm · Cần đạt tối thiểu 80% để vượt qua.`
+            : "Tạo bài kiểm tra ngắn từ những nhiệm vụ Roadmap bạn đã hoàn thành."
       }
       width="max-w-3xl"
     >
-      {loading ? (
+      {loading || quizExecution.recovering ? (
         <div className="py-12">
           <PageLoading label="Đang tải dữ liệu bài kiểm tra của ngày hôm nay..." />
         </div>
+      ) : quizExecution.active ? (
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <LoaderCircle className="size-10 animate-spin text-indigo-600" />
+          <div>
+            <p className="font-bold text-slate-900">AI đang tạo Micro-Quiz</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Bạn có thể đóng cửa sổ này. Tiến trình vẫn tiếp tục ở máy chủ.
+            </p>
+          </div>
+        </div>
       ) : !currentQuiz || questions.length === 0 ? (
-        <div className="py-8 text-center text-slate-500">
-          <HelpCircle className="mx-auto size-12 text-slate-300 mb-3" />
-          <p className="font-semibold">Không tìm thấy nội dung bài kiểm tra.</p>
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+          <Sparkles className="size-12 text-indigo-400" />
+          <div className="max-w-md">
+            <p className="font-bold text-slate-900">
+              {quizExecution.execution?.status === "FAILED"
+                ? "AI chưa thể tạo Micro-Quiz"
+                : "Chưa có Micro-Quiz cho phiên bản kế hoạch hiện tại"}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              {quizExecution.execution?.failureMessage ||
+                quizExecution.pollingError ||
+                (dailyPlanVersionId
+                  ? "Bạn cần hoàn thành ít nhất một nhiệm vụ có liên kết với Roadmap trước khi tạo Quiz."
+                  : "Hãy kích hoạt một phiên bản kế hoạch trước khi tạo Micro-Quiz.")}
+            </p>
+          </div>
+          <Button
+            onClick={() => void handleGenerate()}
+            loading={quizExecution.submitting}
+            disabled={!dailyPlanVersionId}
+          >
+            <RefreshCw className="size-4" />
+            {quizExecution.execution?.status === "FAILED"
+              ? "Thử lại"
+              : dailyPlanVersionId
+                ? "Tạo Micro-Quiz"
+                : "Kích hoạt kế hoạch trước"}
+          </Button>
         </div>
       ) : (
         <div className="space-y-5">
-          {/* LỊCH SỬ CÁC LẦN LÀM QUIZ (ATTEMPTS TABS) & NÚT TẠO MỚI */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-100/70 p-2.5 border border-slate-200">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-600 flex items-center gap-1 mr-1">
-                <History className="size-3.5" /> Lần làm:
-              </span>
-              {quizzes.map((q, idx) => {
-                const isSelected = q.id === selectedQuizId;
-                const isQSubmitted = q.status === "SUBMITTED";
-                const qScore = q.score != null ? `${q.score.toFixed(0)}%` : "Đang làm";
-                const qPassed = q.passed;
-                const attemptNumber = quizzes.length - idx;
-
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => handleSelectQuiz(q.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      isSelected
-                        ? "bg-white shadow-sm ring-2 ring-indigo-500 text-indigo-900 font-extrabold"
-                        : "bg-transparent text-slate-600 hover:bg-white/60"
-                    }`}
-                  >
-                    <span>Lần {attemptNumber}</span>
-                    <span
-                      className={`text-[11px] px-1.5 py-0.5 rounded font-semibold ${
-                        !isQSubmitted
-                          ? "bg-amber-100 text-amber-800"
-                          : qPassed
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-rose-100 text-rose-800"
-                      }`}
-                    >
-                      {qScore}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Nút Tạo Quiz mới nếu tất cả đã nộp hoặc muốn thử sức lại */}
-            {quizzes.every((q) => q.status === "SUBMITTED") && (
-              <Button
-                size="sm"
-                variant="secondary"
-                loading={generatingNew}
-                onClick={() => void handleCreateNewQuiz()}
-                className="text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 shrink-0"
-              >
-                <PlusCircle className="size-3.5 text-indigo-600" />
-                Tạo bài Quiz mới
-              </Button>
-            )}
-          </div>
-
           {isSubmitted ? (
             /* KẾT QUẢ & PHÂN TÍCH ĐIỂM MẠNH / ĐIỂM YẾU CỦA BÀI QUIZ ĐANG CHỌN */
             <div className="space-y-6 animate-fade-up max-h-[68vh] overflow-y-auto pr-1">
@@ -441,8 +406,8 @@ export function DailyMicroQuizModal({
                       <Lightbulb className="size-3.5 text-amber-500" /> 2. Phản hồi cho AI thích ứng
                     </strong>
                     <p className="text-slate-600 leading-relaxed">
-                      Đánh giá cảm nhận hiểu bài bên dưới để AI tự động tối ưu tỷ lệ Review Tasks
-                      (20%–40%) trong ngày tiếp theo.
+                      Đánh giá mức độ hiểu bài để AI cân nhắc tối đa một nhiệm vụ ôn tập, không vượt
+                      quá 30% quỹ thời gian của ngày tiếp theo.
                     </p>
                   </div>
                 </div>
@@ -466,9 +431,7 @@ export function DailyMicroQuizModal({
                         >
                           <Star
                             className={`size-5 ${
-                              star <= rating
-                                ? "fill-amber-400 text-amber-400"
-                                : "text-slate-300"
+                              star <= rating ? "fill-amber-400 text-amber-400" : "text-slate-300"
                             }`}
                           />
                         </button>
@@ -631,8 +594,8 @@ export function DailyMicroQuizModal({
                   })}
                 </div>
                 <div className="text-right text-xs text-slate-500 shrink-0 font-medium">
-                  Đã trả lời: <strong className="text-indigo-600 font-bold">{answeredCount}</strong>/
-                  {totalQuestions}
+                  Đã trả lời: <strong className="text-indigo-600 font-bold">{answeredCount}</strong>
+                  /{totalQuestions}
                 </div>
               </div>
 
@@ -707,7 +670,7 @@ export function DailyMicroQuizModal({
                     <Button
                       variant="success"
                       loading={submitting}
-                      disabled={submitting}
+                      disabled={submitting || answeredCount !== totalQuestions}
                       onClick={() => void handleSubmit()}
                     >
                       <CheckCircle2 className="size-4" />

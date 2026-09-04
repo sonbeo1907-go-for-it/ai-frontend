@@ -25,6 +25,7 @@ import { Modal } from "@/components/ui/modal";
 import { PageLoading } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
+import { WeakTopicsPanel } from "@/features/evaluations/weak-topics-panel";
 import {
   roadmapStatusLabels,
   versionOriginLabels,
@@ -305,6 +306,7 @@ export function RoadmapDetailView() {
         onRefresh={refreshAiStatus}
         onDismiss={dismissAiFailure}
       />
+      <WeakTopicsPanel roadmapId={id} roadmapVersionId={version?.id} />
       <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">
         <Card className="h-fit p-4">
           <div className="flex items-center gap-2 px-2 py-1">

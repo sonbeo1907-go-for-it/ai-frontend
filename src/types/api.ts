@@ -13,12 +13,16 @@ export type ProgressEntryStatus = "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED
 export type AiProviderProtocol = "OPENAI_COMPATIBLE";
 export type CredentialSelectionStrategy = "PRIORITY";
 export type AiPurpose =
-  "DOCUMENT_EXTRACTION" | "ROADMAP_GENERATION" | "DAILY_PLAN_GENERATION" | "DAILY_PLAN_REVIEW";
+  | "DOCUMENT_EXTRACTION"
+  | "ROADMAP_GENERATION"
+  | "DAILY_PLAN_GENERATION"
+  | "DAILY_PLAN_REVIEW"
+  | "QUIZ_GENERATION";
 export type AiAdjustmentAction = "CARRY_OVER" | "SPLIT" | "RESCHEDULE" | "DROP";
 export type AiExecutionStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
 export type AiExecutionOperation = "GENERATE" | "REGENERATE";
-export type AiExecutionTargetType = "ROADMAP" | "DAILY_PLAN";
-export type AiExecutionResultType = "ROADMAP_VERSION" | "DAILY_PLAN_VERSION";
+export type AiExecutionTargetType = "ROADMAP" | "DAILY_PLAN" | "DAILY_PLAN_VERSION" | "WEAK_TOPIC";
+export type AiExecutionResultType = "ROADMAP_VERSION" | "DAILY_PLAN_VERSION" | "QUIZ";
 
 export interface ApiResponse<T> {
   data: T;
@@ -346,4 +350,3 @@ export interface UpdateAiProviderCredentialInput {
 }
 
 export * from "./evaluation";
-

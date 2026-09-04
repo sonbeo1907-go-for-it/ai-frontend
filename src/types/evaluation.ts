@@ -25,6 +25,7 @@ export interface QuizQuestion {
 export interface QuizDetail {
   id: string;
   dailyPlanId?: string;
+  dailyPlanVersionId?: string;
   roadmapId: string;
   quizType: QuizType;
   status: QuizStatus;
@@ -51,6 +52,7 @@ export interface SelfEvaluationPayload {
 export interface DailyEvaluation {
   id: string;
   dailyPlanId: string;
+  dailyPlanVersionId: string;
   evaluationDate: string;
   quizScore?: number;
   quizPassed?: boolean;
@@ -62,6 +64,7 @@ export interface DailyEvaluation {
 export interface WeakTopic {
   id: string;
   roadmapId: string;
+  roadmapVersionId: string;
   roadmapItemId: string;
   topicTitle?: string;
   milestoneTitle?: string;

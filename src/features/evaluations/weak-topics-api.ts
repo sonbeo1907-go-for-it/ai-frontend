@@ -1,7 +1,7 @@
 import { apiRequest } from "@/lib/api-client";
 import type {
+  AiExecution,
   MasteryCheckResult,
-  QuizDetail,
   SubmitQuizPayload,
   WeakTopic,
   WeakTopicStatus,
@@ -11,13 +11,19 @@ export async function getRoadmapWeakTopics(
   roadmapId: string,
   statuses?: WeakTopicStatus[],
 ): Promise<WeakTopic[]> {
-  const query = statuses?.length ? `?statuses=${statuses.join(",")}` : "";
-  return apiRequest<WeakTopic[]>(`/api/v1/roadmaps/${roadmapId}/weak-topics${query}`);
+  const query = new URLSearchParams();
+  statuses?.forEach((status) => query.append("status", status));
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  return apiRequest<WeakTopic[]>(`/api/v1/roadmaps/${roadmapId}/weak-topics${suffix}`);
 }
 
-export async function generateMasteryCheckQuiz(weakTopicId: string): Promise<QuizDetail> {
-  return apiRequest<QuizDetail>(`/api/v1/weak-topics/${weakTopicId}/mastery-check/generate`, {
+export async function queueMasteryCheckGeneration(
+  weakTopicId: string,
+  idempotencyKey: string,
+): Promise<AiExecution> {
+  return apiRequest<AiExecution>(`/api/v1/weak-topics/${weakTopicId}/mastery-check/generate`, {
     method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
   });
 }
 
