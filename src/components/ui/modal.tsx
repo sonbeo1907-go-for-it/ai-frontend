@@ -38,23 +38,62 @@ export function Modal({
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const closeOptionsRef = useRef({
+    closeDisabled,
+    confirmClose,
+    onClose,
+  });
+
+  useEffect(() => {
+    closeOptionsRef.current = {
+      closeDisabled,
+      confirmClose,
+      onClose,
+    };
+  }, [closeDisabled, confirmClose, onClose]);
 
   const requestClose = useCallback(() => {
-    if (closeDisabled) return;
+    const closeOptions = closeOptionsRef.current;
+
+    if (closeOptions.closeDisabled) return;
     if (
-      confirmClose &&
+      closeOptions.confirmClose &&
       !window.confirm("Bạn có thay đổi chưa lưu. Bạn có chắc muốn đóng cửa sổ này?")
     ) {
       return;
     }
-    onClose();
-  }, [closeDisabled, confirmClose, onClose]);
+    closeOptions.onClose();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
 
     const previousOverflow = document.body.style.overflow;
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
+
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      const currentFocus = document.activeElement as HTMLElement | null;
+      const focusAlreadyInside =
+        currentFocus && dialogRef.current?.contains(currentFocus) ? currentFocus : null;
+      const preferred = dialogRef.current?.querySelector<HTMLElement>(
+        "[data-modal-initial-focus], [autofocus]",
+      );
+      const first = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+
+      (preferred ?? focusAlreadyInside ?? first ?? dialogRef.current)?.focus();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.body.style.overflow = previousOverflow;
+      restoreFocusRef.current?.focus();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
     const listener = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -83,19 +122,10 @@ export function Modal({
       }
     };
 
-    document.body.style.overflow = "hidden";
     document.addEventListener("keydown", listener);
-    const focusFrame = window.requestAnimationFrame(() => {
-      const preferred = dialogRef.current?.querySelector<HTMLElement>("[autofocus]");
-      const first = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-      (preferred ?? first ?? dialogRef.current)?.focus();
-    });
 
     return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", listener);
-      restoreFocusRef.current?.focus();
     };
   }, [open, requestClose]);
 
