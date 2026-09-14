@@ -65,7 +65,7 @@ export function WeakTopicsPanel({ roadmapId, roadmapVersionId }: WeakTopicsPanel
         <div>
           <div className="flex items-center gap-2">
             <AlertTriangle className="size-4 text-amber-500" />
-            <h2 className="text-sm font-black text-slate-950">Chủ đề cần củng cố</h2>
+            <h2 className="text-sm font-black text-slate-950">Đơn vị học cần củng cố</h2>
           </div>
           <p className="mt-1 text-xs text-slate-500">
             Kết quả được gắn với đúng phiên bản Roadmap đang xem.
@@ -87,9 +87,16 @@ export function WeakTopicsPanel({ roadmapId, roadmapVersionId }: WeakTopicsPanel
               <div key={topic.id} className="rounded-xl border border-slate-200 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-bold text-slate-900">{topic.topicTitle}</p>
+                    <p className="font-bold text-slate-900">
+                      {topic.learningUnitTitle || topic.topicTitle || "Đơn vị học"}
+                    </p>
+                    {topic.topicTitle && (
+                      <p className="mt-1 text-xs font-semibold text-indigo-600">
+                        Chủ đề: {topic.topicTitle}
+                      </p>
+                    )}
                     {topic.milestoneTitle && (
-                      <p className="mt-1 text-xs text-slate-500">{topic.milestoneTitle}</p>
+                      <p className="mt-1 text-xs text-slate-500">Cột mốc: {topic.milestoneTitle}</p>
                     )}
                   </div>
                   <Badge tone={status.tone}>{status.label}</Badge>

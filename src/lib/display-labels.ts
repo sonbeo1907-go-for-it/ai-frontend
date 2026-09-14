@@ -1,4 +1,11 @@
-import type { DailyPlanStatus, DailyTaskCategory, RoadmapStatus, VersionStatus } from "@/types/api";
+import type {
+  DailyPlanStatus,
+  DailyTaskCategory,
+  ProgressEntryStatus,
+  RoadmapItemProgressStatus,
+  RoadmapStatus,
+  VersionStatus,
+} from "@/types/api";
 
 export type VersionOrigin = "MANUAL" | "USER_EDITED" | "AI_GENERATED" | "AI_REGENERATED";
 
@@ -35,4 +42,16 @@ export const dailyTaskCategoryLabels: Record<DailyTaskCategory, string> = {
   NEW_MATERIAL: "Kiến thức mới",
   PRACTICE: "Thực hành",
   CUSTOM: "Tùy chỉnh",
+};
+
+export const roadmapProgressStatusLabels: Record<RoadmapItemProgressStatus, string> = {
+  NOT_STARTED: "Chưa bắt đầu",
+  IN_PROGRESS: "Đang học",
+  COMPLETED: "Đã hoàn thành",
+};
+
+export const progressOutcomeLabels: Record<ProgressEntryStatus, string> = {
+  COMPLETED: "Hoàn thành",
+  PARTIALLY_COMPLETED: "Hoàn thành một phần",
+  SKIPPED: "Bỏ qua",
 };

@@ -10,6 +10,7 @@ import {
   Clock3,
   CopyPlus,
   Info,
+  History,
   ListChecks,
   MoreHorizontal,
   Pencil,
@@ -41,12 +42,18 @@ import type {
   DailyTaskCategory,
   ProgressEntryStatus,
   DailyEvaluation,
+  AvailableLearningUnit,
+  DailyPlanTaskProgressHistory,
+  ProgressEntry,
 } from "@/types/api";
 import { DailyMicroQuizModal } from "@/features/evaluations/daily-micro-quiz-modal";
 import { getDailyEvaluation } from "@/features/evaluations/evaluation-api";
 import { DailyPlanAiExecutionStatus } from "./daily-plan-ai-execution-status";
 import { PomodoroModal } from "./pomodoro-modal";
 import { useDailyPlanAiExecution } from "./use-daily-plan-ai-execution";
+import { dailyPlanApi, type ProgressInput } from "./daily-plan-api";
+import { LearningUnitPicker } from "./learning-unit-picker";
+import { DailyPlanProgressHistoryModal, ProgressHistoryModal } from "./progress-history-modal";
 
 const getAdjustmentDisplay = (action: AiAdjustmentAction) => {
   switch (action) {
@@ -76,11 +83,20 @@ export function DailyPlanDetailView() {
   const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
   const [activationConfirmOpen, setActivationConfirmOpen] = useState(false);
   const [progressTarget, setProgressTarget] = useState<DailyPlanItem | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<DailyPlanItem | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<ProgressEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [planHistoryOpen, setPlanHistoryOpen] = useState(false);
+  const [planHistory, setPlanHistory] = useState<DailyPlanTaskProgressHistory[]>([]);
+  const [planHistoryLoading, setPlanHistoryLoading] = useState(false);
+  const [correctionTarget, setCorrectionTarget] = useState<ProgressEntry | null>(null);
   const [editTaskTarget, setEditTaskTarget] = useState<DailyPlanItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DailyPlanItem | null>(null);
   const [pomodoro, setPomodoro] = useState<{ open: boolean; taskId?: string }>({ open: false });
   const [quizModalOpen, setQuizModalOpen] = useState(false);
   const [evaluation, setEvaluation] = useState<DailyEvaluation | null>(null);
+  const [availableLearningUnits, setAvailableLearningUnits] = useState<AvailableLearningUnit[]>([]);
+  const [learningUnitsLoading, setLearningUnitsLoading] = useState(false);
   const load = useCallback(async () => {
     await Promise.resolve();
     setLoading(true);
@@ -167,10 +183,99 @@ export function DailyPlanDetailView() {
       await run();
       show(message);
       await load();
+      return true;
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadAvailableLearningUnits() {
+    if (!plan?.roadmapId) {
+      setAvailableLearningUnits([]);
+      return;
+    }
+
+    setLearningUnitsLoading(true);
+    try {
+      setAvailableLearningUnits(await dailyPlanApi.getAvailableLearningUnits(id));
+    } catch (error) {
+      setAvailableLearningUnits([]);
+      show(getErrorMessage(error), "error");
+    } finally {
+      setLearningUnitsLoading(false);
+    }
+  }
+
+  async function openAddTask() {
+    setAddOpen(true);
+    await loadAvailableLearningUnits();
+  }
+
+  async function openEditTask(item: DailyPlanItem) {
+    setEditTaskTarget(item);
+    await loadAvailableLearningUnits();
+  }
+
+  async function openProgressHistory(item: DailyPlanItem) {
+    setHistoryTarget(item);
+    setHistoryEntries([]);
+    setHistoryLoading(true);
+    try {
+      setHistoryEntries(await dailyPlanApi.getProgressHistory(id, item.id));
     } catch (error) {
       show(getErrorMessage(error), "error");
     } finally {
-      setBusy(false);
+      setHistoryLoading(false);
+    }
+  }
+
+  async function openPlanProgressHistory() {
+    setPlanHistoryOpen(true);
+    setPlanHistory([]);
+    setPlanHistoryLoading(true);
+    try {
+      setPlanHistory(await dailyPlanApi.getPlanProgressHistory(id));
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+    } finally {
+      setPlanHistoryLoading(false);
+    }
+  }
+
+  async function recordProgress(
+    item: DailyPlanItem,
+    values: ProgressInput,
+    idempotencyKey: string,
+  ): Promise<boolean> {
+    try {
+      await dailyPlanApi.recordProgress(id, item.id, values, idempotencyKey);
+      show("Tiến độ đã được ghi vào lịch sử.");
+      await load();
+      return true;
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+      return false;
+    }
+  }
+
+  async function correctProgress(
+    item: DailyPlanItem,
+    entry: ProgressEntry,
+    values: ProgressInput,
+    idempotencyKey: string,
+  ): Promise<boolean> {
+    try {
+      await dailyPlanApi.correctProgress(id, item.id, entry.id, values, idempotencyKey);
+      show("Đã lưu bản sửa mà không ghi đè lịch sử cũ.");
+      await load();
+      setHistoryEntries(await dailyPlanApi.getProgressHistory(id, item.id));
+      return true;
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+      return false;
     }
   }
   async function createDraft() {
@@ -223,7 +328,7 @@ export function DailyPlanDetailView() {
   }
   async function remove() {
     if (!version || !deleteTarget) return;
-    await action(
+    const removed = await action(
       () =>
         apiRequest<DailyPlanVersion>(
           `/api/v1/daily-plans/${id}/versions/${version.id}/items/${deleteTarget.id}`,
@@ -231,7 +336,7 @@ export function DailyPlanDetailView() {
         ),
       "Nhiệm vụ đã được xóa khỏi bản DRAFT.",
     );
-    setDeleteTarget(null);
+    if (removed) setDeleteTarget(null);
   }
   const recordPomodoro = useCallback(
     async (taskId: string, minutes: number) => {
@@ -313,11 +418,15 @@ export function DailyPlanDetailView() {
                       : "Sinh kế hoạch AI"}
               </Button>
               {editable && (
-                <Button variant="secondary" onClick={() => setAddOpen(true)}>
+                <Button variant="secondary" onClick={() => void openAddTask()}>
                   <Plus className="size-4" />
                   Thêm nhiệm vụ
                 </Button>
               )}
+              <Button variant="secondary" onClick={() => void openPlanProgressHistory()}>
+                <History className="size-4" />
+                Lịch sử tiến độ
+              </Button>
               {editable && (
                 <Button
                   variant="success"
@@ -460,7 +569,7 @@ export function DailyPlanDetailView() {
                   Thêm task thủ công vào phiên bản DRAFT này.
                 </p>
                 {editable && (
-                  <Button className="mt-5" onClick={() => setAddOpen(true)}>
+                  <Button className="mt-5" onClick={() => void openAddTask()}>
                     <Plus className="size-4" />
                     Thêm nhiệm vụ
                   </Button>
@@ -474,29 +583,28 @@ export function DailyPlanDetailView() {
                 item={item}
                 editable={Boolean(editable)}
                 executable={Boolean(executable)}
-                onEdit={() => setEditTaskTarget(item)}
+                onEdit={() => void openEditTask(item)}
                 onDelete={() => setDeleteTarget(item)}
                 onProgress={() => setProgressTarget(item)}
+                onHistory={() => void openProgressHistory(item)}
                 onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
               />
             ))
           )}
         </div>
       </div>
-      {version && (
+      {version && addOpen && (
         <AddTaskModal
           open={addOpen}
           onClose={() => setAddOpen(false)}
+          availableLearningUnits={availableLearningUnits}
+          learningUnitsLoading={learningUnitsLoading}
           onSave={async (values) => {
-            await action(
-              () =>
-                apiRequest<DailyPlanItem>(
-                  `/api/v1/daily-plans/${id}/versions/${version.id}/items`,
-                  { method: "POST", body: JSON.stringify(values) },
-                ),
+            const saved = await action(
+              () => dailyPlanApi.addTask(id, version.id, values),
               "Đã thêm nhiệm vụ vào bản DRAFT.",
             );
-            setAddOpen(false);
+            if (saved) setAddOpen(false);
           }}
         />
       )}
@@ -505,16 +613,14 @@ export function DailyPlanDetailView() {
           open
           item={editTaskTarget}
           onClose={() => setEditTaskTarget(null)}
+          availableLearningUnits={availableLearningUnits}
+          learningUnitsLoading={learningUnitsLoading}
           onSave={async (values) => {
-            await action(
-              () =>
-                apiRequest<DailyPlanVersion>(
-                  `/api/v1/daily-plans/${id}/versions/${version.id}/items/${editTaskTarget.id}`,
-                  { method: "PATCH", body: JSON.stringify(values) },
-                ),
+            const saved = await action(
+              () => dailyPlanApi.updateTask(id, version.id, editTaskTarget.id, values),
               "Đã cập nhật nhiệm vụ trong bản DRAFT.",
             );
-            setEditTaskTarget(null);
+            if (saved) setEditTaskTarget(null);
           }}
         />
       )}
@@ -523,17 +629,46 @@ export function DailyPlanDetailView() {
           open
           item={progressTarget}
           onClose={() => setProgressTarget(null)}
-          onSave={async (values) => {
-            await action(
-              () =>
-                apiRequest<DailyPlanItem>(
-                  `/api/v1/daily-plans/${id}/items/${progressTarget.id}/progress`,
-                  { method: "POST", body: JSON.stringify(values) },
-                ),
-              "Tiến độ đã được ghi vào lịch sử.",
-            );
-            setProgressTarget(null);
+          onSave={async (values, idempotencyKey) => {
+            const saved = await recordProgress(progressTarget, values, idempotencyKey);
+            if (saved) setProgressTarget(null);
+            return saved;
           }}
+        />
+      )}
+      {historyTarget && !correctionTarget && (
+        <ProgressHistoryModal
+          item={historyTarget}
+          entries={historyEntries}
+          loading={historyLoading}
+          onClose={() => setHistoryTarget(null)}
+          onCorrect={setCorrectionTarget}
+        />
+      )}
+      {historyTarget && correctionTarget && (
+        <ProgressModal
+          open
+          item={historyTarget}
+          initialEntry={correctionTarget}
+          title="Sửa kết quả tiến độ"
+          onClose={() => setCorrectionTarget(null)}
+          onSave={async (values, idempotencyKey) => {
+            const saved = await correctProgress(
+              historyTarget,
+              correctionTarget,
+              values,
+              idempotencyKey,
+            );
+            if (saved) setCorrectionTarget(null);
+            return saved;
+          }}
+        />
+      )}
+      {planHistoryOpen && (
+        <DailyPlanProgressHistoryModal
+          histories={planHistory}
+          loading={planHistoryLoading}
+          onClose={() => setPlanHistoryOpen(false)}
         />
       )}
       {pomodoro.open && (
@@ -550,7 +685,7 @@ export function DailyPlanDetailView() {
         onClose={() => setDeleteTarget(null)}
         closeDisabled={busy}
         title="Xóa nhiệm vụ?"
-        description="Chỉ task trong bản DRAFT chưa có lịch sử tiến độ mới có thể bị xóa."
+        description="Nhiệm vụ sẽ được gỡ khỏi bản DRAFT. Lịch sử tiến độ đã ghi vẫn được hệ thống bảo toàn."
       >
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
@@ -635,6 +770,7 @@ function TaskCard({
   onEdit,
   onDelete,
   onProgress,
+  onHistory,
   onPomodoro,
 }: {
   item: DailyPlanItem;
@@ -643,6 +779,7 @@ function TaskCard({
   onEdit: () => void;
   onDelete: () => void;
   onProgress: () => void;
+  onHistory: () => void;
   onPomodoro: () => void;
 }) {
   const status = {
@@ -684,6 +821,19 @@ function TaskCard({
           {item.description && (
             <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
           )}
+          {(item.studyUnit || item.learningUnitId) && (
+            <div className="mt-2 rounded-lg bg-indigo-50/70 px-3 py-2 text-xs text-indigo-800">
+              <p className="font-bold">
+                Đơn vị học:{" "}
+                {item.studyUnit?.title ?? item.learningUnitTitle ?? item.roadmapItemTitle}
+              </p>
+              {(item.roadmapItem || item.parentTopicTitle) && (
+                <p className="mt-0.5 text-indigo-600">
+                  Chủ đề: {item.roadmapItem?.title ?? item.parentTopicTitle}
+                </p>
+              )}
+            </div>
+          )}
           {adjustment && item.aiAdjustmentReason && (
             <div className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-slate-600">
               <Info className="mt-0.5 size-3.5 shrink-0 text-indigo-500" />
@@ -717,6 +867,16 @@ function TaskCard({
               </button>
             </>
           )}
+          {item.status !== "NOT_STARTED" && (
+            <button
+              onClick={onHistory}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
+              title="Lịch sử tiến độ"
+              aria-label={`Xem lịch sử tiến độ của ${item.title}`}
+            >
+              <History className="size-4" />
+            </button>
+          )}
           {editable && (
             <>
               <button
@@ -744,17 +904,23 @@ function EditTaskModal({
   open,
   item,
   onClose,
+  availableLearningUnits,
+  learningUnitsLoading,
   onSave,
 }: {
   open: boolean;
   item: DailyPlanItem;
   onClose: () => void;
+  availableLearningUnits: AvailableLearningUnit[];
+  learningUnitsLoading: boolean;
   onSave: (values: {
     title: string;
     description: string;
     category: DailyTaskCategory;
     plannedMinutes: number;
     orderIndex: number;
+    learningUnitId?: string | null;
+    clearLearningUnit?: boolean;
   }) => Promise<void>;
 }) {
   const [title, setTitle] = useState(item.title);
@@ -762,13 +928,17 @@ function EditTaskModal({
   const [category, setCategory] = useState<DailyTaskCategory>(item.category);
   const [minutes, setMinutes] = useState(item.plannedMinutes ?? 30);
   const [position, setPosition] = useState((item.orderIndex ?? 0) + 1);
+  const originalLearningUnitId =
+    item.studyUnit?.id ?? item.learningUnitId ?? item.roadmapItemId ?? null;
+  const [learningUnitId, setLearningUnitId] = useState<string | null>(originalLearningUnitId);
   const [loading, setLoading] = useState(false);
   const dirty =
     title.trim() !== item.title ||
     description.trim() !== (item.description ?? "") ||
     category !== item.category ||
     minutes !== (item.plannedMinutes ?? 30) ||
-    position !== (item.orderIndex ?? 0) + 1;
+    position !== (item.orderIndex ?? 0) + 1 ||
+    learningUnitId !== originalLearningUnitId;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -780,6 +950,8 @@ function EditTaskModal({
         category,
         plannedMinutes: minutes,
         orderIndex: position - 1,
+        learningUnitId,
+        clearLearningUnit: Boolean(originalLearningUnitId && !learningUnitId),
       });
     } finally {
       setLoading(false);
@@ -811,6 +983,12 @@ function EditTaskModal({
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
+        <LearningUnitPicker
+          units={availableLearningUnits}
+          value={learningUnitId}
+          loading={learningUnitsLoading}
+          onChange={(unit) => setLearningUnitId(unit?.id ?? null)}
+        />
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Nhóm">
             <Select
@@ -858,22 +1036,27 @@ function EditTaskModal({
 function AddTaskModal({
   open,
   onClose,
+  availableLearningUnits,
+  learningUnitsLoading,
   onSave,
 }: {
   open: boolean;
   onClose: () => void;
+  availableLearningUnits: AvailableLearningUnit[];
+  learningUnitsLoading: boolean;
   onSave: (values: {
     title: string;
     description: string;
     category: DailyTaskCategory;
     plannedMinutes: number;
-    roadmapItemId: null;
+    learningUnitId: string | null;
   }) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<DailyTaskCategory>("CUSTOM");
   const [minutes, setMinutes] = useState(30);
+  const [learningUnitId, setLearningUnitId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -884,10 +1067,8 @@ function AddTaskModal({
         description: description.trim(),
         category,
         plannedMinutes: minutes,
-        roadmapItemId: null,
+        learningUnitId,
       });
-      setTitle("");
-      setDescription("");
     } finally {
       setLoading(false);
     }
@@ -900,7 +1081,11 @@ function AddTaskModal({
       description="Task chỉ được thêm vào phiên bản DRAFT đang chọn."
       closeDisabled={loading}
       confirmClose={Boolean(
-        title.trim() || description.trim() || category !== "CUSTOM" || minutes !== 30,
+        title.trim() ||
+        description.trim() ||
+        category !== "CUSTOM" ||
+        minutes !== 30 ||
+        learningUnitId,
       )}
     >
       <form onSubmit={submit} className="space-y-5">
@@ -919,6 +1104,12 @@ function AddTaskModal({
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
+        <LearningUnitPicker
+          units={availableLearningUnits}
+          value={learningUnitId}
+          loading={learningUnitsLoading}
+          onChange={(unit) => setLearningUnitId(unit?.id ?? null)}
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Nhóm">
             <Select
@@ -957,42 +1148,46 @@ function AddTaskModal({
 function ProgressModal({
   open,
   item,
+  initialEntry,
+  title = "Ghi nhận kết quả",
   onClose,
   onSave,
 }: {
   open: boolean;
   item: DailyPlanItem;
+  initialEntry?: ProgressEntry;
+  title?: string;
   onClose: () => void;
-  onSave: (values: {
-    status: ProgressEntryStatus;
-    actualMinutes: number;
-    actualResult: string;
-    difficulty?: number;
-    understandingRating?: number;
-    note: string;
-  }) => Promise<void>;
+  onSave: (values: ProgressInput, idempotencyKey: string) => Promise<boolean>;
 }) {
-  const [status, setStatus] = useState<ProgressEntryStatus>(
-    item.status === "PARTIALLY_COMPLETED" || item.status === "SKIPPED" ? item.status : "COMPLETED",
-  );
-  const [minutes, setMinutes] = useState(item.plannedMinutes ?? 30);
-  const [result, setResult] = useState("");
-  const [difficulty, setDifficulty] = useState(3);
-  const [understanding, setUnderstanding] = useState(3);
-  const [note, setNote] = useState("");
+  const initialStatus: ProgressEntryStatus =
+    initialEntry?.status ??
+    (item.status === "PARTIALLY_COMPLETED" || item.status === "SKIPPED"
+      ? item.status
+      : "COMPLETED");
+  const [status, setStatus] = useState<ProgressEntryStatus>(initialStatus);
+  const [minutes, setMinutes] = useState(initialEntry?.actualMinutes ?? item.plannedMinutes ?? 30);
+  const [result, setResult] = useState(initialEntry?.actualResult ?? "");
+  const [difficulty, setDifficulty] = useState(initialEntry?.difficulty ?? 3);
+  const [understanding, setUnderstanding] = useState(initialEntry?.understandingRating ?? 3);
+  const [note, setNote] = useState(initialEntry?.note ?? "");
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [loading, setLoading] = useState(false);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
     try {
-      await onSave({
-        status,
-        actualMinutes: minutes,
-        actualResult: result,
-        difficulty,
-        understandingRating: understanding,
-        note,
-      });
+      await onSave(
+        {
+          status,
+          actualMinutes: minutes,
+          actualResult: result,
+          difficulty,
+          understandingRating: understanding,
+          note,
+        },
+        idempotencyKey,
+      );
     } finally {
       setLoading(false);
     }
@@ -1001,11 +1196,16 @@ function ProgressModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Ghi nhận kết quả"
+      title={title}
       description={item.title}
       closeDisabled={loading}
       confirmClose={Boolean(
-        result.trim() || note.trim() || minutes !== (item.plannedMinutes ?? 30),
+        status !== initialStatus ||
+        result.trim() !== (initialEntry?.actualResult ?? "") ||
+        note.trim() !== (initialEntry?.note ?? "") ||
+        minutes !== (initialEntry?.actualMinutes ?? item.plannedMinutes ?? 30) ||
+        difficulty !== (initialEntry?.difficulty ?? 3) ||
+        understanding !== (initialEntry?.understandingRating ?? 3),
       )}
     >
       <form onSubmit={submit} className="space-y-5">

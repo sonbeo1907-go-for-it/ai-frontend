@@ -66,7 +66,12 @@ export interface WeakTopic {
   roadmapId: string;
   roadmapVersionId: string;
   roadmapItemId: string;
+  targetItemType: "LEARNING_UNIT";
+  learningUnitId: string;
+  learningUnitTitle: string;
+  topicId: string;
   topicTitle?: string;
+  milestoneId?: string;
   milestoneTitle?: string;
   status: WeakTopicStatus;
   triggerSource: WeakTopicTrigger;

@@ -10,6 +10,8 @@ export type DailyTaskCategory = "REVIEW" | "NEW_MATERIAL" | "PRACTICE" | "CUSTOM
 export type DailyTaskStatus =
   "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
 export type ProgressEntryStatus = "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
+export type RoadmapItemProgressStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+export type RoadmapItemType = "MILESTONE" | "TOPIC" | "LEARNING_UNIT";
 export type AiProviderProtocol = "OPENAI_COMPATIBLE";
 export type CredentialSelectionStrategy = "PRIORITY";
 export type AiPurpose =
@@ -93,13 +95,53 @@ export interface RoadmapOnboarding {
 export interface RoadmapItem {
   id: string;
   version: number;
-  itemType: "MILESTONE" | "TOPIC";
+  itemType: RoadmapItemType;
   parentItemId?: string;
   title: string;
   description?: string;
   orderIndex: number;
   estimatedMinutes?: number;
   topics: RoadmapItem[];
+  learningUnits: RoadmapItem[];
+  progress?: RoadmapItemProgress | null;
+}
+
+export interface RoadmapItemProgress {
+  completionState: RoadmapItemProgressStatus;
+  latestOutcome?: ProgressEntryStatus | null;
+  completionPercentage: number;
+  completedLearningUnits?: number | null;
+  totalLearningUnits?: number | null;
+}
+
+export interface RoadmapProgressSummary {
+  roadmapVersionId: string;
+  completedTopics: number;
+  totalTopics: number;
+  completionPercentage: number;
+}
+
+export interface RoadmapProgress extends RoadmapProgressSummary {
+  roadmapId: string;
+  topics: RoadmapTopicProgress[];
+}
+
+export interface RoadmapTopicProgress {
+  roadmapItemId: string;
+  title: string;
+  status: RoadmapItemProgressStatus;
+  completionPercentage: number;
+  completedLearningUnits: number;
+  totalLearningUnits: number;
+  learningUnits: RoadmapLearningUnitProgress[];
+}
+
+export interface RoadmapLearningUnitProgress {
+  roadmapItemId: string;
+  title: string;
+  status: RoadmapItemProgressStatus;
+  latestOutcome?: ProgressEntryStatus | null;
+  completionPercentage: number;
 }
 export interface RoadmapVersion {
   id: string;
@@ -120,6 +162,7 @@ export interface Roadmap {
   status: RoadmapStatus;
   activeVersionId?: string;
   versions: RoadmapVersion[];
+  progress?: RoadmapProgressSummary | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -169,8 +212,63 @@ export interface DailyPlanItem {
   completedAt?: string;
   createdAt: string;
   roadmapItemId?: string;
+  roadmapItemTitle?: string;
+  learningUnitId?: string;
+  learningUnitTitle?: string;
+  parentTopicId?: string;
+  parentTopicTitle?: string;
+  roadmapItem?: RoadmapItemReference | null;
+  studyUnit?: StudyUnitReference | null;
   aiAdjustmentAction?: AiAdjustmentAction | null;
   aiAdjustmentReason?: string | null;
+}
+
+export interface RoadmapItemReference {
+  id: string;
+  title: string;
+}
+
+export interface StudyUnitReference {
+  id: string;
+  title: string;
+}
+
+export interface AvailableLearningUnit {
+  id: string;
+  title: string;
+  description?: string;
+  estimatedMinutes?: number;
+  orderIndex: number;
+  topicId: string;
+  topicTitle: string;
+  milestoneId: string;
+  milestoneTitle: string;
+  progressStatus: RoadmapItemProgressStatus;
+  latestOutcome?: ProgressEntryStatus | null;
+}
+
+export interface ProgressEntry {
+  id: string;
+  dailyPlanItemId?: string;
+  roadmapVersionId?: string;
+  learningUnitId?: string;
+  status: ProgressEntryStatus;
+  actualMinutes: number;
+  completionPercentage: number;
+  actualResult?: string;
+  difficulty?: number;
+  understandingRating?: number;
+  note?: string;
+  supersedesEntryId?: string;
+  recordedAt: string;
+}
+
+export interface DailyPlanTaskProgressHistory {
+  dailyPlanItemId: string;
+  dailyPlanVersionId: string;
+  taskTitle: string;
+  removedAt?: string | null;
+  entries: ProgressEntry[];
 }
 export interface DailyPlanVersion {
   id: string;

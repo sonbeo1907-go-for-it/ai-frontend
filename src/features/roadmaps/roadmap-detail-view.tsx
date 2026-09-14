@@ -23,7 +23,7 @@ import { Card } from "@/components/ui/card";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { PageLoading } from "@/components/ui/states";
-import { apiRequest, getErrorMessage } from "@/lib/api-client";
+import { apiRequest, getErrorMessage, isApiErrorCode } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import { WeakTopicsPanel } from "@/features/evaluations/weak-topics-panel";
 import {
@@ -38,6 +38,12 @@ import {
 } from "./roadmap-ai-generation-modal";
 import { RoadmapAiExecutionStatus } from "./roadmap-ai-execution-status";
 import { useRoadmapAiExecution } from "./use-roadmap-ai-execution";
+import { itemTypeLabel, roadmapApi } from "./roadmap-api";
+import {
+  LearningUnitProgress,
+  RoadmapProgressSummaryCard,
+  TopicProgress,
+} from "./roadmap-progress";
 
 export function RoadmapDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -52,8 +58,10 @@ export function RoadmapDetailView() {
   const [aiMode, setAiMode] = useState<"generate" | "regenerate" | null>(null);
   const [aiError, setAiError] = useState("");
   const [topicParent, setTopicParent] = useState<RoadmapItem | null>(null);
+  const [learningUnitParent, setLearningUnitParent] = useState<RoadmapItem | null>(null);
   const [editTarget, setEditTarget] = useState<RoadmapItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RoadmapItem | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
   const load = useCallback(async () => {
     await Promise.resolve();
     setLoading(true);
@@ -108,18 +116,18 @@ export function RoadmapDetailView() {
   const aiBlockingMutations = aiRecovering || aiActive;
   const draftVersionSelected = version?.status === "DRAFT";
   const editable = draftVersionSelected && !aiBlockingMutations;
-  const complete = Boolean(
-    version?.milestones.length &&
-    version.milestones.every((milestone) => milestone.topics.length > 0),
-  );
+  const activationIssue = getActivationIssue(version);
+  const complete = Boolean(version && !activationIssue);
   async function action(run: () => Promise<unknown>, message: string) {
     setBusy(true);
     try {
       await run();
       show(message);
       await load();
+      return true;
     } catch (error) {
       show(getErrorMessage(error), "error");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -151,8 +159,26 @@ export function RoadmapDetailView() {
       setMetadataOpen(false);
       show("Tên và mô tả lộ trình đã được cập nhật.");
     } catch (error) {
+      if (isApiErrorCode(error, "ROADMAP_ALREADY_ACTIVATED")) {
+        setMetadataOpen(false);
+        setCopyOpen(true);
+      }
       show(getErrorMessage(error), "error");
       await load();
+    }
+  }
+
+  async function createEditableCopy() {
+    setBusy(true);
+    try {
+      const copy = await roadmapApi.createEditableCopy(id);
+      show("Đã tạo một lộ trình DRAFT mới để bạn chỉnh sửa.");
+      router.push(`/roadmaps/${copy.id}`);
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+    } finally {
+      setBusy(false);
+      setCopyOpen(false);
     }
   }
   function openAiModal(mode: "generate" | "regenerate") {
@@ -197,14 +223,14 @@ export function RoadmapDetailView() {
   }
   async function removeItem() {
     if (!version || !deleteTarget) return;
-    await action(
+    const removed = await action(
       () =>
         apiRequest<void>(`/api/v1/roadmaps/${id}/versions/${version.id}/items/${deleteTarget.id}`, {
           method: "DELETE",
         }),
       "Đã xóa nội dung khỏi bản DRAFT.",
     );
-    setDeleteTarget(null);
+    if (removed) setDeleteTarget(null);
   }
   if (loading && !roadmap) return <PageLoading label="Đang mở lộ trình…" />;
   if (!roadmap)
@@ -244,7 +270,7 @@ export function RoadmapDetailView() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {roadmap.status !== "ARCHIVED" && roadmap.status !== "ONBOARDING" && (
+              {roadmap.status === "DRAFT" && (
                 <Button variant="secondary" onClick={() => setMetadataOpen(true)}>
                   <Edit3 className="size-4" />
                   Sửa thông tin
@@ -273,7 +299,7 @@ export function RoadmapDetailView() {
                   Kích hoạt
                 </Button>
               )}
-              {!draftVersionSelected && !aiBlockingMutations && (
+              {roadmap.status === "DRAFT" && !draftVersionSelected && !aiBlockingMutations && (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="success"
@@ -289,12 +315,18 @@ export function RoadmapDetailView() {
                   </Button>
                 </div>
               )}
+              {roadmap.status === "ACTIVE" && !aiBlockingMutations && (
+                <Button variant="secondary" onClick={() => setCopyOpen(true)}>
+                  <CopyPlus className="size-4" />
+                  Tạo bản sao để chỉnh sửa
+                </Button>
+              )}
             </div>
           </div>
+          <RoadmapProgressSummaryCard progress={roadmap.progress} />
           {editable && !complete && (
             <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-800">
-              <strong>Chưa thể kích hoạt.</strong> Bản DRAFT cần ít nhất một cột mốc và mỗi cột mốc
-              cần ít nhất một chủ đề.
+              <strong>Chưa thể kích hoạt.</strong> {activationIssue}
             </div>
           )}
         </div>
@@ -353,6 +385,7 @@ export function RoadmapDetailView() {
               version={version}
               editable={editable}
               onAddTopic={setTopicParent}
+              onAddLearningUnit={setLearningUnitParent}
               onEdit={setEditTarget}
               onDelete={setDeleteTarget}
             />
@@ -416,7 +449,7 @@ export function RoadmapDetailView() {
           itemType="MILESTONE"
           nextOrder={version.milestones.length}
           onSave={async (values) => {
-            await action(
+            const saved = await action(
               () =>
                 apiRequest<RoadmapItem>(
                   `/api/v1/roadmaps/${id}/versions/${version.id}/milestones`,
@@ -424,7 +457,7 @@ export function RoadmapDetailView() {
                 ),
               "Đã thêm cột mốc.",
             );
-            setMilestoneOpen(false);
+            if (saved) setMilestoneOpen(false);
           }}
         />
       )}
@@ -436,7 +469,7 @@ export function RoadmapDetailView() {
           itemType="TOPIC"
           nextOrder={topicParent.topics.length}
           onSave={async (values) => {
-            await action(
+            const saved = await action(
               () =>
                 apiRequest<RoadmapItem>(
                   `/api/v1/roadmaps/${id}/versions/${version.id}/milestones/${topicParent.id}/topics`,
@@ -444,7 +477,25 @@ export function RoadmapDetailView() {
                 ),
               "Đã thêm chủ đề.",
             );
-            setTopicParent(null);
+            if (saved) setTopicParent(null);
+          }}
+        />
+      )}
+      {version && learningUnitParent && (
+        <ItemModal
+          open
+          onClose={() => setLearningUnitParent(null)}
+          title={`Thêm đơn vị học vào “${learningUnitParent.title}”`}
+          itemType="LEARNING_UNIT"
+          parentTitle={learningUnitParent.title}
+          siblingTitles={learningUnitParent.learningUnits.map((item) => item.title)}
+          nextOrder={learningUnitParent.learningUnits.length}
+          onSave={async (values) => {
+            const saved = await action(
+              () => roadmapApi.createLearningUnit(id, version.id, learningUnitParent.id, values),
+              "Đã thêm đơn vị học.",
+            );
+            if (saved) setLearningUnitParent(null);
           }}
         />
       )}
@@ -452,20 +503,28 @@ export function RoadmapDetailView() {
         <ItemModal
           open
           onClose={() => setEditTarget(null)}
-          title={`Chỉnh sửa ${editTarget.itemType === "MILESTONE" ? "cột mốc" : "chủ đề"}`}
+          title={`Chỉnh sửa ${itemTypeLabel(editTarget.itemType)}`}
           itemType={editTarget.itemType}
+          parentTitle={
+            editTarget.itemType === "LEARNING_UNIT"
+              ? findParentTopic(version, editTarget)?.title
+              : undefined
+          }
+          siblingTitles={
+            editTarget.itemType === "LEARNING_UNIT"
+              ? (findParentTopic(version, editTarget)
+                  ?.learningUnits.filter((item) => item.id !== editTarget.id)
+                  .map((item) => item.title) ?? [])
+              : undefined
+          }
           initial={editTarget}
           nextOrder={editTarget.orderIndex}
           onSave={async (values) => {
-            await action(
-              () =>
-                apiRequest<RoadmapItem>(
-                  `/api/v1/roadmaps/${id}/versions/${version.id}/items/${editTarget.id}`,
-                  { method: "PATCH", body: JSON.stringify(values) },
-                ),
+            const saved = await action(
+              () => roadmapApi.updateItem(id, version.id, editTarget.id, values),
               "Nội dung và thứ tự đã được cập nhật.",
             );
-            setEditTarget(null);
+            if (saved) setEditTarget(null);
           }}
         />
       )}
@@ -473,11 +532,13 @@ export function RoadmapDetailView() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         closeDisabled={busy}
-        title={`Xóa ${deleteTarget?.itemType === "MILESTONE" ? "cột mốc" : "chủ đề"}?`}
+        title={`Xóa ${deleteTarget ? itemTypeLabel(deleteTarget.itemType) : "nội dung"}?`}
         description={
           deleteTarget?.itemType === "MILESTONE"
-            ? "Các chủ đề bên trong cột mốc cũng sẽ bị xóa khỏi bản DRAFT."
-            : "Thao tác chỉ áp dụng cho bản DRAFT đang chỉnh sửa."
+            ? "Các chủ đề và đơn vị học bên trong cột mốc cũng sẽ bị xóa khỏi bản DRAFT."
+            : deleteTarget?.itemType === "TOPIC"
+              ? "Các đơn vị học bên trong chủ đề cũng sẽ bị xóa khỏi bản DRAFT."
+              : "Thao tác chỉ áp dụng cho bản DRAFT đang chỉnh sửa."
         }
       >
         <div className="flex justify-end gap-3">
@@ -487,6 +548,23 @@ export function RoadmapDetailView() {
           <Button variant="danger" loading={busy} onClick={() => void removeItem()}>
             <Trash2 className="size-4" />
             Xóa
+          </Button>
+        </div>
+      </Modal>
+      <Modal
+        open={copyOpen}
+        onClose={() => setCopyOpen(false)}
+        closeDisabled={busy}
+        title="Tạo bản sao để chỉnh sửa?"
+        description="Lộ trình đã kích hoạt là bất biến. Hệ thống sẽ tạo một lộ trình mới với Version 1 ở trạng thái DRAFT; lộ trình hiện tại và lịch sử của nó không bị thay đổi."
+      >
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setCopyOpen(false)}>
+            Hủy
+          </Button>
+          <Button loading={busy} onClick={() => void createEditableCopy()}>
+            <CopyPlus className="size-4" />
+            Tạo bản sao
           </Button>
         </div>
       </Modal>
@@ -570,12 +648,14 @@ function VersionCanvas({
   version,
   editable,
   onAddTopic,
+  onAddLearningUnit,
   onEdit,
   onDelete,
 }: {
   version: RoadmapVersion;
   editable: boolean;
   onAddTopic: (item: RoadmapItem) => void;
+  onAddLearningUnit: (item: RoadmapItem) => void;
   onEdit: (item: RoadmapItem) => void;
   onDelete: (item: RoadmapItem) => void;
 }) {
@@ -627,39 +707,80 @@ function VersionCanvas({
                     {milestone.topics.map((topic) => (
                       <div
                         key={topic.id}
-                        className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5"
+                        className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5"
                       >
-                        <span className="mt-1 size-2 shrink-0 rounded-full bg-indigo-400" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-extrabold text-slate-900">{topic.title}</p>
-                          {topic.description && (
-                            <p className="mt-1 text-xs leading-5 text-slate-500">
-                              {topic.description}
-                            </p>
-                          )}
-                          <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">
-                            <Clock3 className="size-3" />
-                            {topic.estimatedMinutes ?? 0} phút · thứ tự {topic.orderIndex}
-                          </span>
-                        </div>
-                        {editable && (
-                          <div className="flex shrink-0 gap-1 opacity-70 group-hover:opacity-100">
-                            <button
-                              onClick={() => onEdit(topic)}
-                              className="rounded-lg p-2 text-slate-400 hover:bg-white hover:text-indigo-600"
-                              aria-label="Chỉnh sửa"
-                            >
-                              <Edit3 className="size-3.5" />
-                            </button>
-                            <button
-                              onClick={() => onDelete(topic)}
-                              className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                              aria-label="Xóa"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
+                        <div className="group flex items-start gap-3">
+                          <span className="mt-1 size-2 shrink-0 rounded-full bg-indigo-400" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-extrabold text-slate-900">{topic.title}</p>
+                            {topic.description && (
+                              <p className="mt-1 text-xs leading-5 text-slate-500">
+                                {topic.description}
+                              </p>
+                            )}
+                            <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                              <Clock3 className="size-3" />
+                              {topic.estimatedMinutes ?? 0} phút · thứ tự {topic.orderIndex}
+                            </span>
+                            <TopicProgress progress={topic.progress} />
                           </div>
-                        )}
+                          {editable && (
+                            <div className="flex shrink-0 gap-1 opacity-70 group-hover:opacity-100">
+                              <button
+                                onClick={() => onEdit(topic)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-white hover:text-indigo-600"
+                                aria-label={`Chỉnh sửa chủ đề ${topic.title}`}
+                              >
+                                <Edit3 className="size-3.5" />
+                              </button>
+                              <button
+                                onClick={() => onDelete(topic)}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                                aria-label={`Xóa chủ đề ${topic.title}`}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="mt-3 space-y-2 border-l-2 border-slate-200 pl-4">
+                          {topic.learningUnits.map((learningUnit) => (
+                            <div
+                              key={learningUnit.id}
+                              className="group flex items-start gap-2 rounded-xl bg-white p-3 ring-1 ring-slate-200"
+                            >
+                              <LearningUnitProgress item={learningUnit} />
+                              {editable && (
+                                <div className="flex shrink-0 gap-1 opacity-70 group-hover:opacity-100">
+                                  <button
+                                    onClick={() => onEdit(learningUnit)}
+                                    className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                                    aria-label={`Chỉnh sửa đơn vị học ${learningUnit.title}`}
+                                  >
+                                    <Edit3 className="size-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => onDelete(learningUnit)}
+                                    className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                                    aria-label={`Xóa đơn vị học ${learningUnit.title}`}
+                                  >
+                                    <Trash2 className="size-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {editable && (
+                            <button
+                              onClick={() => onAddLearningUnit(topic)}
+                              className="focus-ring flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 py-2.5 text-xs font-bold text-slate-500 hover:border-indigo-300 hover:bg-white hover:text-indigo-700"
+                            >
+                              <Plus className="size-3.5" />
+                              Thêm đơn vị học
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                     {editable && (
@@ -703,6 +824,8 @@ function ItemModal({
   onClose,
   title,
   itemType,
+  parentTitle,
+  siblingTitles = [],
   initial,
   nextOrder,
   onSave,
@@ -710,7 +833,9 @@ function ItemModal({
   open: boolean;
   onClose: () => void;
   title: string;
-  itemType: "MILESTONE" | "TOPIC";
+  itemType: "MILESTONE" | "TOPIC" | "LEARNING_UNIT";
+  parentTitle?: string;
+  siblingTitles?: string[];
   initial?: RoadmapItem;
   nextOrder: number;
   onSave: (values: {
@@ -725,6 +850,15 @@ function ItemModal({
   const [orderIndex, setOrderIndex] = useState(initial?.orderIndex ?? nextOrder);
   const [minutes, setMinutes] = useState(initial?.estimatedMinutes ?? 60);
   const [loading, setLoading] = useState(false);
+  const normalizedName = name.trim().toLocaleLowerCase("vi");
+  const learningUnitTitleError =
+    itemType === "LEARNING_UNIT" && normalizedName
+      ? normalizedName === parentTitle?.trim().toLocaleLowerCase("vi")
+        ? "Đơn vị học phải là một hành động nhỏ và cụ thể hơn chủ đề cha."
+        : siblingTitles.some((title) => title.trim().toLocaleLowerCase("vi") === normalizedName)
+          ? "Tên đơn vị học không được trùng với đơn vị khác trong cùng chủ đề."
+          : undefined
+      : undefined;
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -733,7 +867,7 @@ function ItemModal({
         title: name.trim(),
         description: description.trim(),
         orderIndex,
-        ...(itemType === "TOPIC" ? { estimatedMinutes: minutes } : {}),
+        ...(itemType !== "MILESTONE" ? { estimatedMinutes: minutes } : {}),
       });
     } finally {
       setLoading(false);
@@ -749,16 +883,29 @@ function ItemModal({
         name !== (initial?.title ?? "") ||
         description !== (initial?.description ?? "") ||
         orderIndex !== (initial?.orderIndex ?? nextOrder) ||
-        (itemType === "TOPIC" && minutes !== (initial?.estimatedMinutes ?? 60))
+        (itemType !== "MILESTONE" && minutes !== (initial?.estimatedMinutes ?? 60))
       }
     >
       <form onSubmit={submit} className="space-y-5">
-        <Field label="Tên">
+        <Field
+          label={itemType === "LEARNING_UNIT" ? "Tên đơn vị học" : "Tên"}
+          hint={
+            itemType === "LEARNING_UNIT"
+              ? "Mô tả một kết quả học nhỏ có thể hoàn thành trong một nhiệm vụ."
+              : undefined
+          }
+          error={learningUnitTitleError}
+        >
           <Input
             autoFocus
             value={name}
             onChange={(event) => setName(event.target.value)}
             maxLength={200}
+            placeholder={
+              itemType === "LEARNING_UNIT"
+                ? "Ví dụ: Giải thích Encapsulation và viết một ví dụ"
+                : undefined
+            }
             required
           />
         </Field>
@@ -780,12 +927,12 @@ function ItemModal({
               required
             />
           </Field>
-          {itemType === "TOPIC" && (
+          {itemType !== "MILESTONE" && (
             <Field label="Thời lượng dự kiến (phút)">
               <Input
                 type="number"
                 min={1}
-                max={10080}
+                max={itemType === "LEARNING_UNIT" ? 1440 : 10080}
                 value={minutes}
                 onChange={(event) => setMinutes(Number(event.target.value))}
                 required
@@ -797,7 +944,11 @@ function ItemModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Hủy
           </Button>
-          <Button type="submit" loading={loading} disabled={!name.trim()}>
+          <Button
+            type="submit"
+            loading={loading}
+            disabled={!name.trim() || Boolean(learningUnitTitleError)}
+          >
             {initial ? (
               "Lưu thay đổi"
             ) : (
@@ -811,4 +962,42 @@ function ItemModal({
       </form>
     </Modal>
   );
+}
+
+function findParentTopic(version: RoadmapVersion, item: RoadmapItem) {
+  if (!item.parentItemId) return undefined;
+  return version.milestones
+    .flatMap((milestone) => milestone.topics)
+    .find((topic) => topic.id === item.parentItemId);
+}
+
+function getActivationIssue(version: RoadmapVersion | null) {
+  if (!version?.milestones.length) {
+    return "Bản DRAFT cần ít nhất một cột mốc.";
+  }
+
+  for (const milestone of version.milestones) {
+    if (!milestone.topics.length) {
+      return `Cột mốc “${milestone.title}” cần ít nhất một chủ đề.`;
+    }
+
+    for (const topic of milestone.topics) {
+      if (!topic.learningUnits.length) {
+        return `Chủ đề “${topic.title}” cần ít nhất một đơn vị học.`;
+      }
+
+      const normalizedTopicTitle = topic.title.trim().toLocaleLowerCase();
+      const normalizedUnitTitles = topic.learningUnits.map((unit) =>
+        unit.title.trim().toLocaleLowerCase(),
+      );
+      if (normalizedUnitTitles.includes(normalizedTopicTitle)) {
+        return `Đơn vị học trong chủ đề “${topic.title}” phải là hành động nhỏ, không được sao chép nguyên tên chủ đề.`;
+      }
+      if (new Set(normalizedUnitTitles).size !== normalizedUnitTitles.length) {
+        return `Các đơn vị học trong chủ đề “${topic.title}” không được trùng tên.`;
+      }
+    }
+  }
+
+  return null;
 }
