@@ -1,4 +1,5 @@
 import type {
+  AiExecutionAnalytics,
   AiProvider,
   AiProviderConfig,
   AiProviderCredential,
@@ -254,6 +255,20 @@ export const aiProviderConfigApi = {
     apiRequest<void>(`${configPath(configId)}?version=${encodeURIComponent(version)}`, {
       method: "DELETE",
     }),
+};
+
+export const AI_ANALYTICS_PATH = "/api/v1/admin/ai-analytics";
+
+export const aiAnalyticsApi = {
+  getMetrics: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return apiRequest<AiExecutionAnalytics[]>(
+      qs ? `${AI_ANALYTICS_PATH}?${qs}` : AI_ANALYTICS_PATH
+    );
+  },
 };
 
 export function getErrorMessage(error: unknown): string {
