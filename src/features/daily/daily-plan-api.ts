@@ -2,6 +2,7 @@ import { apiRequest } from "@/lib/api-client";
 import type {
   AvailableLearningUnit,
   DailyPlanItem,
+  DailyPlanTaskStepsResponse,
   DailyPlanTaskProgressHistory,
   DailyPlanVersion,
   DailyTaskCategory,
@@ -26,6 +27,23 @@ export interface ProgressInput {
   difficulty?: number;
   understandingRating?: number;
   note: string;
+}
+
+export interface CreateTaskStepInput {
+  title: string;
+  guidance?: string | null;
+  orderIndex?: number;
+  estimatedMinutes?: number | null;
+  required?: boolean;
+}
+
+export interface UpdateTaskStepInput {
+  entityVersion: number;
+  title: string;
+  guidance?: string | null;
+  orderIndex: number;
+  estimatedMinutes?: number | null;
+  required: boolean;
 }
 
 function idempotencyHeaders(idempotencyKey: string) {
@@ -53,6 +71,63 @@ export const dailyPlanApi = {
       {
         method: "PATCH",
         body: JSON.stringify(input),
+      },
+    ),
+
+  getTaskSteps: (planId: string, versionId: string, itemId: string) =>
+    apiRequest<DailyPlanTaskStepsResponse>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/steps`,
+    ),
+
+  createTaskStep: (planId: string, versionId: string, itemId: string, input: CreateTaskStepInput) =>
+    apiRequest<DailyPlanTaskStepsResponse>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/steps`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
+
+  updateTaskStep: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    stepId: string,
+    input: UpdateTaskStepInput,
+  ) =>
+    apiRequest<DailyPlanTaskStepsResponse>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/steps/${stepId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      },
+    ),
+
+  deleteTaskStep: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    stepId: string,
+    entityVersion: number,
+  ) =>
+    apiRequest<DailyPlanTaskStepsResponse>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/steps/${stepId}?entityVersion=${encodeURIComponent(entityVersion)}`,
+      { method: "DELETE" },
+    ),
+
+  setTaskStepCompletion: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    stepId: string,
+    completed: boolean,
+    stateVersion?: number | null,
+  ) =>
+    apiRequest<DailyPlanTaskStepsResponse>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/steps/${stepId}/completion`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ completed, stateVersion: stateVersion ?? null }),
       },
     ),
 

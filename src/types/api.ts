@@ -221,6 +221,35 @@ export interface DailyPlanItem {
   studyUnit?: StudyUnitReference | null;
   aiAdjustmentAction?: AiAdjustmentAction | null;
   aiAdjustmentReason?: string | null;
+  steps: DailyPlanTaskStep[];
+  stepProgress: TaskStepProgress;
+}
+
+export interface DailyPlanTaskStep {
+  id: string;
+  entityVersion: number;
+  dailyPlanItemId: string;
+  title: string;
+  guidance?: string | null;
+  orderIndex: number;
+  estimatedMinutes?: number | null;
+  required: boolean;
+  completed: boolean;
+  completedAt?: string | null;
+  stateVersion?: number | null;
+}
+
+export interface TaskStepProgress {
+  requiredCount: number;
+  completedRequiredCount: number;
+  completionPercentage: number;
+  allRequiredStepsCompleted: boolean;
+}
+
+export interface DailyPlanTaskStepsResponse {
+  dailyPlanItemId: string;
+  steps: DailyPlanTaskStep[];
+  progress: TaskStepProgress;
 }
 
 export interface RoadmapItemReference {

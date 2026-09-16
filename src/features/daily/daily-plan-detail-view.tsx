@@ -4,18 +4,12 @@ import { useParams, useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
-  Check,
   CheckCircle2,
-  Circle,
-  Clock3,
   CopyPlus,
   Info,
   History,
   ListChecks,
-  MoreHorizontal,
-  Pencil,
   Plus,
-  SkipForward,
   Sparkles,
   Timer,
   Trash2,
@@ -29,15 +23,11 @@ import { Modal } from "@/components/ui/modal";
 import { PageLoading, ProgressBar } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDateOnly } from "@/lib/format";
-import {
-  dailyPlanStatusLabels,
-  dailyTaskCategoryLabels,
-  versionStatusLabels,
-} from "@/lib/display-labels";
+import { dailyPlanStatusLabels, versionStatusLabels } from "@/lib/display-labels";
 import type {
-  AiAdjustmentAction,
   DailyPlan,
   DailyPlanItem,
+  DailyPlanTaskStepsResponse,
   DailyPlanVersion,
   DailyTaskCategory,
   ProgressEntryStatus,
@@ -54,21 +44,8 @@ import { useDailyPlanAiExecution } from "./use-daily-plan-ai-execution";
 import { dailyPlanApi, type ProgressInput } from "./daily-plan-api";
 import { LearningUnitPicker } from "./learning-unit-picker";
 import { DailyPlanProgressHistoryModal, ProgressHistoryModal } from "./progress-history-modal";
-
-const getAdjustmentDisplay = (action: AiAdjustmentAction) => {
-  switch (action) {
-    case "CARRY_OVER":
-      return { label: "Chuyển từ hôm qua", tone: "amber" as const };
-    case "SPLIT":
-      return { label: "Đề xuất chia nhỏ", tone: "indigo" as const };
-    case "RESCHEDULE":
-      return { label: "Đề xuất dời lịch", tone: "sky" as const };
-    case "DROP":
-      return { label: "Gợi ý bỏ", tone: "rose" as const };
-    default:
-      return null;
-  }
-};
+import { DailyPlanTaskCard } from "./daily-plan-task-card";
+import { TaskStepDialog } from "./task-steps/task-step-dialog";
 
 export function DailyPlanDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -92,6 +69,7 @@ export function DailyPlanDetailView() {
   const [correctionTarget, setCorrectionTarget] = useState<ProgressEntry | null>(null);
   const [editTaskTarget, setEditTaskTarget] = useState<DailyPlanItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DailyPlanItem | null>(null);
+  const [stepTargetId, setStepTargetId] = useState<string | null>(null);
   const [pomodoro, setPomodoro] = useState<{ open: boolean; taskId?: string }>({ open: false });
   const [quizModalOpen, setQuizModalOpen] = useState(false);
   const [evaluation, setEvaluation] = useState<DailyEvaluation | null>(null);
@@ -150,6 +128,10 @@ export function DailyPlanDetailView() {
     () => versions.find((item) => item.id === selectedId) ?? null,
     [versions, selectedId],
   );
+  const stepTarget = useMemo(
+    () => version?.items.find((item) => item.id === stepTargetId) ?? null,
+    [stepTargetId, version],
+  );
   const currentDraft = useMemo(
     () => versions.find((item) => item.status === "DRAFT") ?? null,
     [versions],
@@ -177,6 +159,27 @@ export function DailyPlanDetailView() {
     0,
   );
   const completion = items.length ? Math.round((earned / items.length) * 10) / 10 : 0;
+
+  const updateTaskSteps = useCallback((versionId: string, response: DailyPlanTaskStepsResponse) => {
+    setVersions((current) =>
+      current.map((candidateVersion) =>
+        candidateVersion.id !== versionId
+          ? candidateVersion
+          : {
+              ...candidateVersion,
+              items: candidateVersion.items.map((candidateItem) =>
+                candidateItem.id !== response.dailyPlanItemId
+                  ? candidateItem
+                  : {
+                      ...candidateItem,
+                      steps: response.steps,
+                      stepProgress: response.progress,
+                    },
+              ),
+            },
+      ),
+    );
+  }, []);
   async function action(run: () => Promise<unknown>, message: string) {
     setBusy(true);
     try {
@@ -513,7 +516,10 @@ export function DailyPlanDetailView() {
             {versions.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setSelectedId(item.id)}
+                onClick={() => {
+                  setStepTargetId(null);
+                  setSelectedId(item.id);
+                }}
                 className={`focus-ring rounded-xl border p-3 text-left ${selectedId === item.id ? "border-indigo-300 bg-indigo-50" : "border-transparent hover:bg-slate-50"}`}
               >
                 <div className="flex items-center justify-between">
@@ -578,7 +584,7 @@ export function DailyPlanDetailView() {
             </Card>
           ) : (
             items.map((item) => (
-              <TaskCard
+              <DailyPlanTaskCard
                 key={item.id}
                 item={item}
                 editable={Boolean(editable)}
@@ -588,6 +594,7 @@ export function DailyPlanDetailView() {
                 onProgress={() => setProgressTarget(item)}
                 onHistory={() => void openProgressHistory(item)}
                 onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
+                onOpenSteps={() => setStepTargetId(item.id)}
               />
             ))
           )}
@@ -621,6 +628,22 @@ export function DailyPlanDetailView() {
               "Đã cập nhật nhiệm vụ trong bản DRAFT.",
             );
             if (saved) setEditTaskTarget(null);
+          }}
+        />
+      )}
+      {version && stepTarget && (
+        <TaskStepDialog
+          open
+          planId={id}
+          versionId={version.id}
+          item={stepTarget}
+          editable={Boolean(editable)}
+          executable={Boolean(executable)}
+          onClose={() => setStepTargetId(null)}
+          onStepsChanged={(response) => updateTaskSteps(version.id, response)}
+          onRecordOutcome={(item) => {
+            setStepTargetId(null);
+            setProgressTarget(item);
           }}
         />
       )}
@@ -761,143 +784,6 @@ function Metric({
       <p className="mt-1 text-xl font-black text-slate-950">{value}</p>
       {children && <div className="mt-2">{children}</div>}
     </div>
-  );
-}
-function TaskCard({
-  item,
-  editable,
-  executable,
-  onEdit,
-  onDelete,
-  onProgress,
-  onHistory,
-  onPomodoro,
-}: {
-  item: DailyPlanItem;
-  editable: boolean;
-  executable: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
-  onProgress: () => void;
-  onHistory: () => void;
-  onPomodoro: () => void;
-}) {
-  const status = {
-    NOT_STARTED: { label: "Chưa bắt đầu", tone: "slate" as const, icon: Circle },
-    IN_PROGRESS: { label: "Đang thực hiện", tone: "indigo" as const, icon: MoreHorizontal },
-    COMPLETED: { label: "Hoàn thành", tone: "emerald" as const, icon: Check },
-    PARTIALLY_COMPLETED: {
-      label: "Hoàn thành một phần",
-      tone: "amber" as const,
-      icon: CheckCircle2,
-    },
-    SKIPPED: { label: "Đã bỏ qua", tone: "rose" as const, icon: SkipForward },
-  }[item.status];
-  const Icon = status.icon;
-  const adjustment = item.aiAdjustmentAction ? getAdjustmentDisplay(item.aiAdjustmentAction) : null;
-  return (
-    <Card className={`p-4 sm:p-5 ${item.status === "COMPLETED" ? "bg-emerald-50/30" : ""}`}>
-      <div className="flex items-start gap-3">
-        <span
-          className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-xl ${item.status === "COMPLETED" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}
-        >
-          <Icon className="size-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3
-              className={`text-sm font-extrabold ${item.status === "COMPLETED" ? "text-slate-500 line-through" : "text-slate-950"}`}
-            >
-              {item.title}
-            </h3>
-            <Badge tone={status.tone}>{status.label}</Badge>
-            {adjustment && (
-              <Badge tone={adjustment.tone}>
-                <Sparkles className="mr-1 inline-block size-3" />
-                {adjustment.label}
-              </Badge>
-            )}
-          </div>
-          {item.description && (
-            <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
-          )}
-          {(item.studyUnit || item.learningUnitId) && (
-            <div className="mt-2 rounded-lg bg-indigo-50/70 px-3 py-2 text-xs text-indigo-800">
-              <p className="font-bold">
-                Đơn vị học:{" "}
-                {item.studyUnit?.title ?? item.learningUnitTitle ?? item.roadmapItemTitle}
-              </p>
-              {(item.roadmapItem || item.parentTopicTitle) && (
-                <p className="mt-0.5 text-indigo-600">
-                  Chủ đề: {item.roadmapItem?.title ?? item.parentTopicTitle}
-                </p>
-              )}
-            </div>
-          )}
-          {adjustment && item.aiAdjustmentReason && (
-            <div className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-slate-600">
-              <Info className="mt-0.5 size-3.5 shrink-0 text-indigo-500" />
-              <span>{item.aiAdjustmentReason}</span>
-            </div>
-          )}
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] font-semibold text-slate-400">
-            <span className="flex items-center gap-1">
-              <Clock3 className="size-3" />
-              {item.plannedMinutes ?? 30} phút
-            </span>
-            <span>{dailyTaskCategoryLabels[item.category]}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          {executable && (
-            <>
-              <button
-                onClick={onPomodoro}
-                className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                title="Pomodoro"
-              >
-                <Timer className="size-4" />
-              </button>
-              <button
-                onClick={onProgress}
-                className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
-                title="Ghi tiến độ"
-              >
-                <CheckCircle2 className="size-4" />
-              </button>
-            </>
-          )}
-          {item.status !== "NOT_STARTED" && (
-            <button
-              onClick={onHistory}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
-              title="Lịch sử tiến độ"
-              aria-label={`Xem lịch sử tiến độ của ${item.title}`}
-            >
-              <History className="size-4" />
-            </button>
-          )}
-          {editable && (
-            <>
-              <button
-                onClick={onEdit}
-                className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
-                title="Chỉnh sửa"
-              >
-                <Pencil className="size-4" />
-              </button>
-              <button
-                onClick={onDelete}
-                className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                title="Xóa"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </Card>
   );
 }
 function EditTaskModal({
