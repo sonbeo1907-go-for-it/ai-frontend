@@ -19,7 +19,9 @@ import { ProgressBar } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDateOnly } from "@/lib/format";
 import { useAuth } from "@/features/auth/auth-context";
-import type { DailyPlanSummary, Material, PageResponse, RoadmapSummary } from "@/types/api";
+import { fetchDashboardReport } from "@/features/reports/report-api";
+import { DashboardStatsSection } from "@/features/reports/dashboard-stats-card";
+import type { DailyPlanSummary, DashboardReport, Material, PageResponse, RoadmapSummary } from "@/types/api";
 
 type DashboardResource<T> = {
   data: T | null;
@@ -38,6 +40,9 @@ function initialResource<T>(): DashboardResource<T> {
 export default function DashboardPage() {
   const { profile } = useAuth();
 
+  const [report, setReport] = useState<DashboardResource<DashboardReport>>(
+    initialResource<DashboardReport>,
+  );
   const [roadmaps, setRoadmaps] = useState<DashboardResource<{ active: number; total: number }>>(
     initialResource<{ active: number; total: number }>,
   );
@@ -47,6 +52,20 @@ export default function DashboardPage() {
   const [materials, setMaterials] = useState<DashboardResource<PageResponse<Material>>>(
     initialResource<PageResponse<Material>>,
   );
+
+  const loadReport = useCallback(async () => {
+    setReport((current) => ({ ...current, loading: true, error: "" }));
+    try {
+      const data = await fetchDashboardReport();
+      setReport({ data, loading: false, error: "" });
+    } catch (error) {
+      setReport((current) => ({
+        ...current,
+        loading: false,
+        error: getErrorMessage(error),
+      }));
+    }
+  }, []);
 
   const loadRoadmaps = useCallback(async () => {
     setRoadmaps((current) => ({ ...current, loading: true, error: "" }));
@@ -105,10 +124,11 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    void loadReport();
     void loadRoadmaps();
     void loadPlans();
     void loadMaterials();
-  }, [loadMaterials, loadPlans, loadRoadmaps]);
+  }, [loadMaterials, loadPlans, loadReport, loadRoadmaps]);
 
   const activeRoadmaps = roadmaps.data?.active ?? 0;
   const recentPlans = plans.data?.content ?? [];
@@ -144,6 +164,18 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {/* US-REP-01: Thống Kê Tiến Độ, Streak & Thời Gian Học */}
+      {report.loading && !report.data ? (
+        <DashboardSectionLoading label="Đang tải thống kê tiến độ & chuỗi học tập…" />
+      ) : report.error && !report.data ? (
+        <DashboardSectionError
+          message={report.error}
+          onRetry={() => void loadReport()}
+        />
+      ) : report.data ? (
+        <DashboardStatsSection report={report.data} />
+      ) : null}
       <section className="grid gap-4 sm:grid-cols-3">
         <Metric
           icon={BookOpen}
