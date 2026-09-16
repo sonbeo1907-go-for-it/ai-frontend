@@ -551,4 +551,42 @@ export interface UpdateAiProviderCredentialInput {
   priority: number;
 }
 
+export interface MasterPlanProgress {
+  roadmapId: string;
+  title: string;
+  completionPercentage: number;
+  completedTopics: number;
+  totalTopics: number;
+  completedLearningUnits: number;
+  totalLearningUnits: number;
+}
+
+export interface StreakProgress {
+  currentStreak: number;
+  longestStreak: number;
+  isActiveToday: boolean;
+  lastActiveDate: string | null;
+  timeZone: string;
+}
+
+export interface DailyStudyTimePoint {
+  date: string;
+  dayOfWeek: string;
+  studyMinutes: number;
+  completedTasks: number;
+  targetMinutes: number;
+}
+
+export interface StudyTimeProgress {
+  totalStudyMinutes: number;
+  totalStudyHours: number;
+  dailyPoints: DailyStudyTimePoint[];
+}
+
+export interface DashboardReport {
+  masterPlan: MasterPlanProgress | null;
+  streak: StreakProgress;
+  studyTime: StudyTimeProgress;
+}
+
 export * from "./evaluation";
