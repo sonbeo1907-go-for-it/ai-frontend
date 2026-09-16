@@ -19,12 +19,22 @@ export type AiPurpose =
   | "ROADMAP_GENERATION"
   | "DAILY_PLAN_GENERATION"
   | "DAILY_PLAN_REVIEW"
-  | "QUIZ_GENERATION";
+  | "QUIZ_GENERATION"
+  | "TASK_GUIDANCE_GENERATION";
 export type AiAdjustmentAction = "CARRY_OVER" | "SPLIT" | "RESCHEDULE" | "DROP";
 export type AiExecutionStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
 export type AiExecutionOperation = "GENERATE" | "REGENERATE";
-export type AiExecutionTargetType = "ROADMAP" | "DAILY_PLAN" | "DAILY_PLAN_VERSION" | "WEAK_TOPIC";
-export type AiExecutionResultType = "ROADMAP_VERSION" | "DAILY_PLAN_VERSION" | "QUIZ";
+export type AiExecutionTargetType =
+  | "ROADMAP"
+  | "DAILY_PLAN"
+  | "DAILY_PLAN_VERSION"
+  | "DAILY_PLAN_ITEM"
+  | "WEAK_TOPIC";
+export type AiExecutionResultType =
+  | "ROADMAP_VERSION"
+  | "DAILY_PLAN_VERSION"
+  | "TASK_GUIDANCE_REVISION"
+  | "QUIZ";
 
 export interface ApiResponse<T> {
   data: T;
@@ -193,10 +203,10 @@ export interface Material {
 }
 export interface PageResponse<T> {
   content: T[];
+  page: number;
   totalElements: number;
   totalPages: number;
   size: number;
-  number: number;
   first: boolean;
   last: boolean;
 }
@@ -250,6 +260,71 @@ export interface DailyPlanTaskStepsResponse {
   dailyPlanItemId: string;
   steps: DailyPlanTaskStep[];
   progress: TaskStepProgress;
+}
+
+export type TaskGuidanceRevisionStatus = "DRAFT" | "SUPERSEDED" | "ARCHIVED";
+
+export type GuidanceReferenceProvenance =
+  | "MATERIAL"
+  | "LEARNING_SOURCE"
+  | "ROADMAP_CONTEXT"
+  | "UNVERIFIED_EXTERNAL";
+
+export interface TaskGuidanceReference {
+  id: string;
+  provenance: GuidanceReferenceProvenance;
+  displayLabel: string;
+  locator?: string | null;
+  targetId?: string | null;
+  externalUrl?: string | null;
+  unverified: boolean;
+}
+
+export interface TaskStepGuidance {
+  id: string;
+  taskStepId: string;
+  taskStepEntityVersion: number;
+  orderIndex: number;
+  instructions: string;
+  expectedResult: string;
+  tips?: string | null;
+  cautions?: string | null;
+  prerequisites?: string | null;
+  references: TaskGuidanceReference[];
+}
+
+export interface TaskGuidanceRevision {
+  guidanceId: string;
+  revisionId: string;
+  dailyPlanVersionId: string;
+  dailyPlanItemId: string;
+  revisionNumber: number;
+  status: TaskGuidanceRevisionStatus;
+  latest: boolean;
+  stale: boolean;
+  objective: string;
+  taskSummary: string;
+  stepGuidances: TaskStepGuidance[];
+  references: TaskGuidanceReference[];
+  generatedAt: string;
+}
+
+export interface TaskGuidanceRevisionSummary {
+  revisionId: string;
+  revisionNumber: number;
+  status: TaskGuidanceRevisionStatus;
+  latest: boolean;
+  stale: boolean;
+  objective: string;
+  generatedAt: string;
+}
+
+export interface TaskGuidanceOverview {
+  guidanceId: string;
+  dailyPlanVersionId: string;
+  dailyPlanItemId: string;
+  latestRevision: TaskGuidanceRevision;
+  revisions: PageResponse<TaskGuidanceRevisionSummary>;
 }
 
 export interface RoadmapItemReference {

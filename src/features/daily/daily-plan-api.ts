@@ -1,5 +1,6 @@
 import { apiRequest } from "@/lib/api-client";
 import type {
+  AiExecution,
   AvailableLearningUnit,
   DailyPlanItem,
   DailyPlanTaskStepsResponse,
@@ -8,6 +9,8 @@ import type {
   DailyTaskCategory,
   ProgressEntry,
   ProgressEntryStatus,
+  TaskGuidanceOverview,
+  TaskGuidanceRevision,
 } from "@/types/api";
 
 export interface DailyTaskInput {
@@ -44,6 +47,10 @@ export interface UpdateTaskStepInput {
   orderIndex: number;
   estimatedMinutes?: number | null;
   required: boolean;
+}
+
+export interface RegenerateTaskGuidanceInput {
+  adjustmentInstruction?: string;
 }
 
 function idempotencyHeaders(idempotencyKey: string) {
@@ -129,6 +136,68 @@ export const dailyPlanApi = {
         method: "PUT",
         body: JSON.stringify({ completed, stateVersion: stateVersion ?? null }),
       },
+    ),
+
+  getTaskGuidanceOverview: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    page = 0,
+    size = 10,
+  ) => {
+    const parameters = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    });
+
+    return apiRequest<TaskGuidanceOverview>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/guidance?${parameters}`,
+    );
+  },
+
+  getTaskGuidanceRevision: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    revisionId: string,
+  ) =>
+    apiRequest<TaskGuidanceRevision>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/guidance/${revisionId}`,
+    ),
+
+  generateTaskGuidance: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AiExecution>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/guidance/generate`,
+      {
+        method: "POST",
+        headers: idempotencyHeaders(idempotencyKey),
+      },
+    ),
+
+  regenerateTaskGuidance: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    input: RegenerateTaskGuidanceInput,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<AiExecution>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/guidance/regenerate`,
+      {
+        method: "POST",
+        headers: idempotencyHeaders(idempotencyKey),
+        body: JSON.stringify(input),
+      },
+    ),
+
+  getCurrentTaskGuidanceExecution: (planId: string, versionId: string, itemId: string) =>
+    apiRequest<AiExecution>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/guidance/execution/current`,
     ),
 
   recordProgress: (planId: string, itemId: string, input: ProgressInput, idempotencyKey: string) =>

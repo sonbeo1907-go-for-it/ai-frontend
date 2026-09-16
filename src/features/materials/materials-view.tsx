@@ -189,7 +189,7 @@ export function MaterialsView() {
             Trang trước
           </Button>
           <span className="text-xs font-bold text-slate-500">
-            Trang {page.number + 1}/{page.totalPages}
+            Trang {page.page + 1}/{page.totalPages}
           </span>
           <Button
             variant="secondary"

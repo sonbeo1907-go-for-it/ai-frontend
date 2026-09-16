@@ -103,7 +103,7 @@ export function DailyPlansView() {
             Trang trước
           </Button>
           <span className="text-xs font-bold text-slate-500">
-            Trang {page.number + 1}/{page.totalPages} · {page.totalElements} kế hoạch
+            Trang {page.page + 1}/{page.totalPages} · {page.totalElements} kế hoạch
           </span>
           <Button
             variant="secondary"

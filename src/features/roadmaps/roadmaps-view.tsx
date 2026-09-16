@@ -133,7 +133,7 @@ export function RoadmapsView() {
             Trang trước
           </Button>
           <span className="text-xs font-bold text-slate-500">
-            Trang {page.number + 1}/{page.totalPages} · {page.totalElements} lộ trình
+            Trang {page.page + 1}/{page.totalPages} · {page.totalElements} lộ trình
           </span>
           <Button
             variant="secondary"

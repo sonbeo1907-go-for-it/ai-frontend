@@ -6,6 +6,7 @@ export const AI_PURPOSES: AiPurpose[] = [
   "DAILY_PLAN_GENERATION",
   "DAILY_PLAN_REVIEW",
   "QUIZ_GENERATION",
+  "TASK_GUIDANCE_GENERATION",
 ];
 
 export const purposeLabels: Record<AiPurpose, string> = {
@@ -14,6 +15,7 @@ export const purposeLabels: Record<AiPurpose, string> = {
   DAILY_PLAN_GENERATION: "Sinh kế hoạch ngày",
   DAILY_PLAN_REVIEW: "Đánh giá kế hoạch ngày",
   QUIZ_GENERATION: "Sinh bài kiểm tra",
+  TASK_GUIDANCE_GENERATION: "Hướng dẫn thực hiện nhiệm vụ",
 };
 
 export const purposeDescriptions: Record<AiPurpose, string> = {
@@ -22,6 +24,7 @@ export const purposeDescriptions: Record<AiPurpose, string> = {
   DAILY_PLAN_GENERATION: "Lập kế hoạch ngày từ lộ trình và tiến độ.",
   DAILY_PLAN_REVIEW: "Đưa ra nhận xét tư vấn cho một phiên bản kế hoạch.",
   QUIZ_GENERATION: "Tạo Micro-Quiz và bài kiểm tra củng cố theo chủ đề.",
+  TASK_GUIDANCE_GENERATION: "Giải thích cách thực hiện từng bước của nhiệm vụ học tập.",
 };
 
 export const protocolLabels: Record<AiProviderProtocol, string> = {

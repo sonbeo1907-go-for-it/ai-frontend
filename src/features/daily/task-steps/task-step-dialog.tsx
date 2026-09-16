@@ -22,6 +22,7 @@ import { dailyTaskCategoryLabels } from "@/lib/display-labels";
 import type { DailyPlanItem, DailyPlanTaskStep, DailyPlanTaskStepsResponse } from "@/types/api";
 import { TaskStepForm } from "./task-step-form";
 import { useTaskSteps } from "./use-task-steps";
+import { TaskGuidancePanel } from "../task-guidance/task-guidance-panel";
 
 interface TaskStepDialogProps {
   open: boolean;
@@ -54,6 +55,7 @@ export function TaskStepDialog({
   const [editingStep, setEditingStep] = useState<DailyPlanTaskStep | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DailyPlanTaskStep | null>(null);
   const [formDirty, setFormDirty] = useState(false);
+  const [guidanceDirty, setGuidanceDirty] = useState(false);
   const { data, pendingKey, refreshing, create, update, remove, setCompletion, refresh } =
     useTaskSteps({
       planId,
@@ -102,11 +104,11 @@ export function TaskStepDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="Các bước thực hiện"
+      title="Chi tiết nhiệm vụ"
       description={item.title}
       width="max-w-3xl"
       closeDisabled={Boolean(pendingKey)}
-      confirmClose={formDirty}
+      confirmClose={formDirty || guidanceDirty}
     >
       <div className="space-y-5">
         <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -386,6 +388,14 @@ export function TaskStepDialog({
             Nhiệm vụ đã có kết quả cuối cùng. Checklist hiện chỉ được xem lại.
           </div>
         )}
+
+        <TaskGuidancePanel
+          planId={planId}
+          versionId={versionId}
+          itemId={item.id}
+          steps={steps}
+          onDirtyChange={setGuidanceDirty}
+        />
 
         {canCompleteSteps && data.progress.allRequiredStepsCompleted && (
           <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">

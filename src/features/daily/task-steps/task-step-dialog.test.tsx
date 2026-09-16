@@ -70,25 +70,69 @@ function renderDialog(
   );
 }
 
+function jsonResponse(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function installFetch(
+  route?: (url: string, init?: RequestInit) => Response | Promise<Response> | undefined,
+) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const routed = route?.(url, init);
+      if (routed) return routed;
+
+      if (url.endsWith("/guidance?page=0&size=10")) {
+        return jsonResponse(
+          {
+            status: 404,
+            code: "TASK_GUIDANCE_NOT_FOUND",
+            message: "Task Guidance was not found.",
+          },
+          404,
+        );
+      }
+      if (url.endsWith("/guidance/execution/current")) {
+        return jsonResponse(
+          {
+            status: 404,
+            code: "AI_EXECUTION_NOT_FOUND",
+            message: "AI execution was not found.",
+          },
+          404,
+        );
+      }
+
+      throw new Error(`Unexpected request: ${url}`);
+    }),
+  );
+}
+
 describe("TaskStepDialog", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn());
+    window.sessionStorage.clear();
+    installFetch();
   });
 
-  it("uses steps embedded in the Daily Plan item without fetching on open", () => {
+  it("uses embedded Task Steps while only recovering Task Guidance on open", async () => {
     renderDialog();
 
     expect(screen.getByText("So sánh orElse và orElseGet")).not.toBeNull();
     expect(screen.getByText("Đơn vị học: Sử dụng Optional an toàn")).not.toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/steps"))).toBe(false);
   });
 
   it("updates runtime completion with the observed state version", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: completedResponse }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+    installFetch((url) =>
+      url.endsWith("/steps/step-1/completion")
+        ? jsonResponse({ data: completedResponse })
+        : undefined,
     );
     const onStepsChanged = vi.fn();
     renderDialog(onStepsChanged);
@@ -127,11 +171,10 @@ describe("TaskStepDialog", () => {
         allRequiredStepsCompleted: false,
       },
     };
-    vi.mocked(fetch).mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: createdResponse }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+    installFetch((url, init) =>
+      url.endsWith("/items/item-1/steps") && init?.method === "POST"
+        ? jsonResponse({ data: createdResponse })
+        : undefined,
     );
     const onStepsChanged = vi.fn();
     renderDialog(onStepsChanged, { item: draftItem, editable: true, executable: false });
@@ -143,7 +186,6 @@ describe("TaskStepDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Thêm bước" }));
 
     await waitFor(() => expect(onStepsChanged).toHaveBeenCalledWith(createdResponse));
-    expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
       "/api/v1/daily-plans/plan-1/versions/version-1/items/item-1/steps",
       expect.objectContaining({ method: "POST" }),
