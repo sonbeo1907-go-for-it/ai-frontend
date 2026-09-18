@@ -136,10 +136,6 @@ export function AiAnalyticsDashboard() {
             <h2 className="text-xl font-black tracking-tight text-slate-950">
               Chỉ số thực thi & Phân tích AI
             </h2>
-            <Badge tone="indigo" className="gap-1">
-              <Zap className="size-3" />
-              US-ADM-02
-            </Badge>
           </div>
           <p className="mt-1 text-xs text-slate-500">
             Dữ liệu tổng hợp theo Nhà cung cấp, Mô hình và Thao tác vận hành.
