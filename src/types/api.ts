@@ -24,8 +24,22 @@ export type AiPurpose =
   | "QUIZ_GENERATION"
   | "TASK_GUIDANCE_GENERATION";
 export type AiAdjustmentAction = "CARRY_OVER" | "SPLIT" | "RESCHEDULE" | "DROP";
-export type AiExecutionStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+export type AiExecutionStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "TIMEOUT";
 export type AiExecutionOperation = "GENERATE" | "REGENERATE";
+
+export interface AiExecutionAnalytics {
+  providerDisplayName: string;
+  model: string;
+  operation: AiExecutionOperation;
+  totalExecutions: number;
+  succeededCount: number;
+  failedCount: number;
+  timeoutCount: number;
+  avgLatencyMs: number | null;
+  totalInputTokens: number | null;
+  totalOutputTokens: number | null;
+  totalTokens: number | null;
+}
 export type AiExecutionTargetType =
   | "ROADMAP"
   | "DAILY_PLAN"

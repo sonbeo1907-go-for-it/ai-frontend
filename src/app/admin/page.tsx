@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, LogOut, ShieldCheck } from "lucide-react";
+import { BarChart3, BookOpen, LogOut, ServerCog, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/states";
+import { AiAnalyticsDashboard } from "@/features/admin/ai-analytics-dashboard";
 import { AiProviderDashboard } from "@/features/admin/ai-provider-dashboard";
 import { useAuth } from "@/features/auth/auth-context";
+
+type AdminTab = "providers" | "analytics";
 
 export default function AdminPage() {
   const router = useRouter();
   const { status, profile, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<AdminTab>("providers");
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
@@ -37,7 +41,7 @@ export default function AdminPage() {
             <div>
               <p className="font-black">Lumio Admin</p>
               <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600">
-                AI provider operations
+                AI Operations & Management
               </p>
             </div>
           </div>
@@ -49,22 +53,50 @@ export default function AdminPage() {
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <section className="mb-8">
+        <section className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-sm font-bold text-indigo-600">
               <ShieldCheck className="size-4" />
               ADMIN workspace
             </div>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
-              Quản trị cấu hình AI
+              Quản trị hệ thống AI
             </h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Quản lý provider, credential và model theo từng mục đích AI.
+              Quản lý provider, credential, model và giám sát hiệu năng, độ trễ, token tiêu thụ.
             </p>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setActiveTab("providers")}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                activeTab === "providers"
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <ServerCog className="size-4" />
+              Cấu hình Provider
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("analytics")}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                activeTab === "analytics"
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <BarChart3 className="size-4" />
+              Chỉ số & Analytics
+            </button>
           </div>
         </section>
 
-        <AiProviderDashboard />
+        {activeTab === "providers" ? <AiProviderDashboard /> : <AiAnalyticsDashboard />}
       </div>
     </main>
   );
