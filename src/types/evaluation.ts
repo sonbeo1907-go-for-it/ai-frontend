@@ -76,15 +76,23 @@ export interface WeakTopic {
   status: WeakTopicStatus;
   triggerSource: WeakTopicTrigger;
   lastQuizScore?: number;
+  lastMasteryScore?: number;
   lastUnderstandingRating?: number;
   unresolvedAt: string;
+  eligibleOn: string;
+  eligibilityZone: string;
   masteredAt?: string;
 }
 
 export interface MasteryCheckResult {
   weakTopicId: string;
+  quizId: string;
+  attemptId: string;
   quizScore: number;
+  correctCount: number;
+  totalCount: number;
   isMastered: boolean;
   weakTopicStatus: WeakTopicStatus;
+  canRetry: boolean;
   message: string;
 }

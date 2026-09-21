@@ -2,6 +2,7 @@ import { apiRequest } from "@/lib/api-client";
 import type {
   AiExecution,
   MasteryCheckResult,
+  QuizDetail,
   SubmitQuizPayload,
   WeakTopic,
   WeakTopicStatus,
@@ -25,6 +26,21 @@ export async function queueMasteryCheckGeneration(
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
   });
+}
+
+export async function getLatestMasteryCheckExecution(weakTopicId: string): Promise<AiExecution> {
+  return apiRequest<AiExecution>(`/api/v1/weak-topics/${weakTopicId}/mastery-check/execution`);
+}
+
+export async function getMasteryCheckQuiz(
+  weakTopicId: string,
+  quizId: string,
+): Promise<QuizDetail> {
+  return apiRequest<QuizDetail>(`/api/v1/weak-topics/${weakTopicId}/mastery-check/${quizId}`);
+}
+
+export async function getMasteryCheckHistory(weakTopicId: string): Promise<QuizDetail[]> {
+  return apiRequest<QuizDetail[]>(`/api/v1/weak-topics/${weakTopicId}/mastery-checks`);
 }
 
 export async function submitMasteryCheck(

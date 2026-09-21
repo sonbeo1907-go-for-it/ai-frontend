@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { getErrorMessage } from "@/lib/api-client";
 import type { WeakTopic } from "@/types/api";
 import { getRoadmapWeakTopics } from "./weak-topics-api";
+import { MasteryCheckModal } from "./mastery-check-modal";
 
 interface WeakTopicsPanelProps {
   roadmapId: string;
@@ -26,17 +27,35 @@ const triggerDisplay = {
   BOTH: "Quiz và mức tự đánh giá đều thấp",
 };
 
+function isEligibleToday(topic: WeakTopic) {
+  if (!topic.eligibleOn || !topic.eligibilityZone) return false;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: topic.eligibilityZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const localDate = `${value("year")}-${value("month")}-${value("day")}`;
+  return localDate >= topic.eligibleOn;
+}
+
 export function WeakTopicsPanel({ roadmapId, roadmapVersionId }: WeakTopicsPanelProps) {
   const [topics, setTopics] = useState<WeakTopic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState<WeakTopic | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const result = await getRoadmapWeakTopics(roadmapId);
+      const result = await getRoadmapWeakTopics(roadmapId, ["UNRESOLVED", "IN_REVIEW", "MASTERED"]);
       setTopics(result);
+      setSelectedTopic((current) =>
+        current ? (result.find((topic) => topic.id === current.id) ?? current) : null,
+      );
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -51,13 +70,13 @@ export function WeakTopicsPanel({ roadmapId, roadmapVersionId }: WeakTopicsPanel
 
   const visibleTopics = useMemo(
     () =>
-      roadmapVersionId
-        ? topics.filter((topic) => topic.roadmapVersionId === roadmapVersionId)
-        : topics,
-    [roadmapVersionId, topics],
+      topics.filter(
+        (topic) =>
+          (!roadmapVersionId || topic.roadmapVersionId === roadmapVersionId) &&
+          (showHistory || topic.status !== "MASTERED"),
+      ),
+    [roadmapVersionId, showHistory, topics],
   );
-
-  if (!loading && !error && visibleTopics.length === 0) return null;
 
   return (
     <Card className="p-5">
@@ -71,14 +90,25 @@ export function WeakTopicsPanel({ roadmapId, roadmapVersionId }: WeakTopicsPanel
             Kết quả được gắn với đúng phiên bản Roadmap đang xem.
           </p>
         </div>
-        <Button size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
-          <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-          Làm mới
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setShowHistory((value) => !value)}>
+            {showHistory ? "Ẩn lịch sử" : "Xem lịch sử"}
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => void load()} disabled={loading}>
+            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+            Làm mới
+          </Button>
+        </div>
       </div>
 
       {error ? (
         <p className="mt-4 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</p>
+      ) : !loading && visibleTopics.length === 0 ? (
+        <p className="mt-4 text-xs text-slate-500">
+          {showHistory
+            ? "Chưa có chủ đề yếu nào trong lộ trình này."
+            : "Không có đơn vị học nào cần củng cố."}
+        </p>
       ) : (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {visibleTopics.map((topic) => {
@@ -104,7 +134,10 @@ export function WeakTopicsPanel({ roadmapId, roadmapVersionId }: WeakTopicsPanel
                 <p className="mt-3 text-xs text-slate-600">{triggerDisplay[topic.triggerSource]}</p>
                 <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-slate-500">
                   {topic.lastQuizScore != null && (
-                    <span>Quiz gần nhất: {topic.lastQuizScore.toFixed(1)}%</span>
+                    <span>Micro-Quiz gần nhất: {topic.lastQuizScore.toFixed(1)}%</span>
+                  )}
+                  {topic.lastMasteryScore != null && (
+                    <span>Kiểm tra củng cố: {topic.lastMasteryScore.toFixed(1)}%</span>
                   )}
                   {topic.lastUnderstandingRating != null && (
                     <span>Mức hiểu: {topic.lastUnderstandingRating}/5</span>
@@ -116,11 +149,43 @@ export function WeakTopicsPanel({ roadmapId, roadmapVersionId }: WeakTopicsPanel
                     Đã vượt qua kiểm tra củng cố
                   </div>
                 )}
+                {topic.status === "MASTERED" && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-3"
+                    onClick={() => setSelectedTopic(topic)}
+                  >
+                    Xem kết quả
+                  </Button>
+                )}
+                {topic.status !== "MASTERED" && (
+                  <div className="mt-4 space-y-2">
+                    <Button
+                      size="sm"
+                      disabled={!isEligibleToday(topic)}
+                      onClick={() => setSelectedTopic(topic)}
+                    >
+                      Kiểm tra củng cố
+                    </Button>
+                    {!isEligibleToday(topic) && (
+                      <p className="text-xs text-slate-500">
+                        Có thể kiểm tra từ ngày {topic.eligibleOn} ({topic.eligibilityZone}).
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
+      <MasteryCheckModal
+        key={selectedTopic?.id ?? "closed"}
+        topic={selectedTopic}
+        onClose={() => setSelectedTopic(null)}
+        onUpdated={() => void load()}
+      />
     </Card>
   );
 }
