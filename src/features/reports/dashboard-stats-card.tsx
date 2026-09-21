@@ -7,6 +7,7 @@ import {
   Award,
   BookOpen,
   ArrowRight,
+  Brain,
   Clock,
   CheckCircle2,
   TrendingUp,
@@ -22,7 +23,7 @@ export function DashboardStatsSection({ report }: { report: DashboardReport }) {
 
   return (
     <section className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
             Thống Kê Học Tập & Tiến Độ
@@ -31,6 +32,15 @@ export function DashboardStatsSection({ report }: { report: DashboardReport }) {
             Duy trì thói quen mỗi ngày để chinh phục mục tiêu đã đề ra.
           </p>
         </div>
+
+        <Link
+          href="/knowledge-map"
+          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-2 text-xs font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-100 hover:text-emerald-950"
+        >
+          <Brain className="size-4 text-emerald-600" />
+          <span>Bản đồ Trí tuệ & Nhật ký Điểm yếu</span>
+          <ArrowRight className="size-3.5" />
+        </Link>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

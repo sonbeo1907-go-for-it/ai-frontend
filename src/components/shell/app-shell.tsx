@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
+  Brain,
   CalendarDays,
   Clock3,
   Files,
@@ -23,6 +24,7 @@ import { cn } from "@/lib/cn";
 const navigation = [
   { href: "/roadmaps", label: "Lộ trình", icon: BookOpen },
   { href: "/daily-plans", label: "Kế hoạch ngày", icon: CalendarDays },
+  { href: "/knowledge-map", label: "Bản đồ tri thức", icon: Brain },
   { href: "/materials", label: "Tài liệu nguồn", icon: Files },
   { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/profile", label: "Hồ sơ", icon: Settings2 },
@@ -32,6 +34,10 @@ const pageMetadata: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": {
     title: "Tổng quan học tập",
     subtitle: "Tiếp tục từ nơi bạn đã dừng lại.",
+  },
+  "/knowledge-map": {
+    title: "Bản đồ Trí tuệ & Nhật ký Điểm yếu",
+    subtitle: "Xem lại danh sách nội dung đã làm chủ và hành trình vượt qua điểm yếu.",
   },
   "/roadmaps": {
     title: "Lộ trình học tập",

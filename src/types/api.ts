@@ -1,3 +1,5 @@
+import type { WeakTopicStatus, WeakTopicTrigger } from "./evaluation";
+
 export type UserRole = "USER" | "ADMIN";
 export type AccountStatus = "ACTIVE" | "INACTIVE" | "LOCKED";
 export type ProficiencyLevel = "BEGINNER" | "BASIC" | "INTERMEDIATE";
@@ -587,6 +589,70 @@ export interface DashboardReport {
   masterPlan: MasterPlanProgress | null;
   streak: StreakProgress;
   studyTime: StudyTimeProgress;
+}
+
+export interface KnowledgeLearningUnit {
+  id: string;
+  title: string;
+  description?: string | null;
+  orderIndex: number;
+  estimatedMinutes: number;
+  mastered: boolean;
+  status: RoadmapItemProgressStatus;
+  masteredAt?: string | null;
+  unresolvedWeakTopic: boolean;
+}
+
+export interface KnowledgeTopic {
+  id: string;
+  title: string;
+  description?: string | null;
+  orderIndex: number;
+  estimatedMinutes: number;
+  mastered: boolean;
+  status: RoadmapItemProgressStatus;
+  completionPercentage: number;
+  masteredAt?: string | null;
+  learningUnits: KnowledgeLearningUnit[];
+}
+
+export interface KnowledgeMilestone {
+  id: string;
+  title: string;
+  description?: string | null;
+  orderIndex: number;
+  topics: KnowledgeTopic[];
+}
+
+export interface KnowledgeMapResponse {
+  roadmapId: string | null;
+  roadmapTitle: string | null;
+  totalMilestones: number;
+  totalTopics: number;
+  masteredTopics: number;
+  totalLearningUnits: number;
+  masteredLearningUnits: number;
+  masteryPercentage: number;
+  milestones: KnowledgeMilestone[];
+}
+
+export interface WeakTopicTimelineItem {
+  weakTopicId: string;
+  roadmapId: string;
+  roadmapTitle: string;
+  learningUnitId: string;
+  learningUnitTitle: string;
+  topicId?: string | null;
+  topicTitle?: string | null;
+  milestoneId?: string | null;
+  milestoneTitle?: string | null;
+  status: WeakTopicStatus;
+  triggerSource: WeakTopicTrigger;
+  lastQuizScore?: number | null;
+  lastUnderstandingRating?: number | null;
+  unresolvedAt: string;
+  masteredAt?: string | null;
+  daysToMaster?: number | null;
 }
 
 export * from "./evaluation";
