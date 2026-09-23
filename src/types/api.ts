@@ -111,6 +111,8 @@ export interface RoadmapOnboarding {
   roadmapId: string;
   version: number;
   status: RoadmapStatus;
+  title?: string;
+  titleOrigin: "USER" | "GOAL_DERIVED" | "AI_SUGGESTED" | "FALLBACK";
   goal?: string;
   proficiencyLevel?: ProficiencyLevel;
   dailyCommitmentMinutes?: number;
