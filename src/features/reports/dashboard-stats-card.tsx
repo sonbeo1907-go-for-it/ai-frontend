@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   TrendingUp,
   Sparkles,
+  Target,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,8 +38,8 @@ export function DashboardStatsSection({ report }: { report: DashboardReport }) {
           href="/knowledge-map"
           className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-2 text-xs font-bold text-emerald-800 shadow-sm transition hover:bg-emerald-100 hover:text-emerald-950"
         >
-          <Brain className="size-4 text-emerald-600" />
-          <span>Bản đồ Trí tuệ & Nhật ký Điểm yếu</span>
+          <Target className="size-4 text-emerald-600" />
+          <span>Tiến độ mục tiêu & Nhật ký Điểm yếu</span>
           <ArrowRight className="size-3.5" />
         </Link>
       </div>
