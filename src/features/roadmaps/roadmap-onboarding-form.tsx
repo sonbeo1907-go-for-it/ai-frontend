@@ -22,6 +22,8 @@ import {
   type RoadmapAiGenerationInput,
 } from "./roadmap-ai-generation-modal";
 import { queueRoadmapGeneration, rememberRoadmapAiExecution } from "./roadmap-ai-execution-api";
+import { RoadmapCommitmentField } from "./roadmap-commitment-field";
+import { formatRoadmapCommitment, isValidRoadmapCommitment } from "./roadmap-commitment";
 
 type OnboardingFormState = {
   title: string;
@@ -62,7 +64,9 @@ function formFromRecord(record: RoadmapOnboarding): OnboardingFormState {
 function firstIncompleteStep(record: RoadmapOnboarding) {
   if (!record.goal?.trim()) return 0;
   if (!record.proficiencyLevel) return 1;
-  if (!record.dailyCommitmentMinutes || !record.expectedDurationDays) return 2;
+  if (!isValidRoadmapCommitment(record.dailyCommitmentMinutes) || !record.expectedDurationDays) {
+    return 2;
+  }
   return 3;
 }
 
@@ -263,11 +267,13 @@ export function RoadmapOnboardingForm() {
       : step === 1
         ? Boolean(form.proficiencyLevel)
         : step === 2
-          ? Boolean(form.dailyCommitmentMinutes && form.expectedDurationDays)
+          ? Boolean(
+              isValidRoadmapCommitment(form.dailyCommitmentMinutes) && form.expectedDurationDays,
+            )
           : Boolean(
               form.goal.trim() &&
               form.proficiencyLevel &&
-              form.dailyCommitmentMinutes &&
+              isValidRoadmapCommitment(form.dailyCommitmentMinutes) &&
               form.expectedDurationDays,
             );
 
@@ -395,21 +401,11 @@ export function RoadmapOnboardingForm() {
               Chọn quỹ thời gian phù hợp với lộ trình này. Bạn có thể điều chỉnh sau.
             </p>
             <div className="mt-6 space-y-6">
-              <Field label="Quỹ thời gian mỗi ngày">
-                <div className="grid grid-cols-3 gap-2">
-                  {[30, 60, 120].map((value) => (
-                    <button
-                      type="button"
-                      aria-pressed={form.dailyCommitmentMinutes === value}
-                      key={value}
-                      onClick={() => setForm({ ...form, dailyCommitmentMinutes: value })}
-                      className={`focus-ring rounded-xl border py-3 text-sm font-bold ${form.dailyCommitmentMinutes === value ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}`}
-                    >
-                      {value === 60 ? "1 giờ" : value === 120 ? "2 giờ" : "30 phút"}
-                    </button>
-                  ))}
-                </div>
-              </Field>
+              <RoadmapCommitmentField
+                value={form.dailyCommitmentMinutes}
+                disabled={saving}
+                onChange={(dailyCommitmentMinutes) => setForm({ ...form, dailyCommitmentMinutes })}
+              />
               <Field label="Thời lượng kỳ vọng">
                 <div className="grid grid-cols-3 gap-2">
                   {[30, 60, 90].map((value) => (
@@ -456,7 +452,11 @@ export function RoadmapOnboardingForm() {
               />
               <SummaryRow
                 label="Quỹ thời gian"
-                value={`${form.dailyCommitmentMinutes ?? 0} phút/ngày`}
+                value={
+                  isValidRoadmapCommitment(form.dailyCommitmentMinutes)
+                    ? `${formatRoadmapCommitment(form.dailyCommitmentMinutes)}/ngày`
+                    : "—"
+                }
                 editLabel="Sửa cam kết"
                 onEdit={() => setStep(2)}
               />

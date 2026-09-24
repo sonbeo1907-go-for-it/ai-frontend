@@ -88,7 +88,7 @@ describe("RoadmapOnboardingForm", () => {
 
     await waitFor(() => expect(screen.getByText("Kiểm tra trước khi tạo lộ trình")).toBeTruthy());
     expect(screen.getByText("React Frontend")).toBeTruthy();
-    expect(screen.getByText("60 phút/ngày")).toBeTruthy();
+    expect(screen.getByText("60 phút (1 giờ)/ngày")).toBeTruthy();
     expect(screen.getByLabelText("Bước 4 trên 4")).toBeTruthy();
   });
 
@@ -137,5 +137,53 @@ describe("RoadmapOnboardingForm", () => {
     await screen.findByRole("alert");
     expect((goalInput as HTMLTextAreaElement).value).toBe("Học Spring Boot");
     expect(screen.getByText("Đặt tên và mục tiêu cho lộ trình")).toBeTruthy();
+  });
+
+  it("resumes a custom commitment and displays its normalized value", async () => {
+    vi.mocked(apiRequest).mockResolvedValueOnce({
+      ...initialRecord,
+      version: 3,
+      title: "Backend Java",
+      titleOrigin: "USER",
+      goal: "Học Spring Boot",
+      proficiencyLevel: "BASIC",
+      dailyCommitmentMinutes: 270,
+      expectedDurationDays: 60,
+    });
+
+    render(<RoadmapOnboardingForm />);
+
+    expect(await screen.findByText("270 phút (4 giờ 30 phút)/ngày")).toBeTruthy();
+  });
+
+  it("supports an eight-hour quick choice and persists 480 minutes", async () => {
+    const stepThreeRecord: RoadmapOnboarding = {
+      ...initialRecord,
+      version: 2,
+      goal: "Học Spring Boot",
+      proficiencyLevel: "BASIC",
+    };
+    vi.mocked(apiRequest)
+      .mockResolvedValueOnce(stepThreeRecord)
+      .mockResolvedValueOnce({
+        ...stepThreeRecord,
+        version: 3,
+        dailyCommitmentMinutes: 480,
+        expectedDurationDays: 90,
+      });
+
+    render(<RoadmapOnboardingForm />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "8 giờ" }));
+    fireEvent.click(screen.getByRole("button", { name: "90 ngày" }));
+    fireEvent.click(screen.getByRole("button", { name: /Tiếp theo/ }));
+
+    await screen.findByText("Kiểm tra trước khi tạo lộ trình");
+    const [, options] = vi.mocked(apiRequest).mock.calls[1];
+    expect(JSON.parse(String(options?.body))).toMatchObject({
+      dailyCommitmentMinutes: 480,
+      expectedDurationDays: 90,
+      entityVersion: 2,
+    });
   });
 });
