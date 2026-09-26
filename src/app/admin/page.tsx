@@ -1,20 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { BarChart3, BookOpen, LogOut, ServerCog, ShieldCheck } from "lucide-react";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { BarChart3, BookOpen, FileCode2, LogOut, ServerCog, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/states";
 import { AiAnalyticsDashboard } from "@/features/admin/ai-analytics-dashboard";
 import { AiProviderDashboard } from "@/features/admin/ai-provider-dashboard";
+import { AiPromptDashboard } from "@/features/admin/ai-prompts";
 import { useAuth } from "@/features/auth/auth-context";
 
-type AdminTab = "providers" | "analytics";
+type AdminTab = "providers" | "analytics" | "prompts";
 
-export default function AdminPage() {
+function AdminPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { status, profile, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<AdminTab>("providers");
+
+  const tabParam = searchParams.get("tab");
+  const activeTab: AdminTab =
+    tabParam === "analytics" || tabParam === "prompts" ? tabParam : "providers";
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
@@ -28,6 +33,12 @@ export default function AdminPage() {
   async function handleLogout() {
     await logout();
     router.replace("/login");
+  }
+
+  function handleTabChange(tab: AdminTab) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", tab);
+    router.replace(`/admin?${params.toString()}`);
   }
 
   return (
@@ -63,16 +74,22 @@ export default function AdminPage() {
               Quản trị hệ thống AI
             </h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Quản lý provider, credential, model và giám sát hiệu năng, độ trễ, token tiêu thụ.
+              Quản lý provider, credential, model, system prompts và giám sát hiệu năng, độ trễ, token tiêu thụ.
             </p>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+          <div
+            role="tablist"
+            aria-label="Khu vực quản trị"
+            className="inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm"
+          >
             <button
               type="button"
-              onClick={() => setActiveTab("providers")}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              role="tab"
+              aria-selected={activeTab === "providers"}
+              onClick={() => handleTabChange("providers")}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
                 activeTab === "providers"
                   ? "bg-slate-950 text-white shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
@@ -83,8 +100,24 @@ export default function AdminPage() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("analytics")}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              role="tab"
+              aria-selected={activeTab === "prompts"}
+              onClick={() => handleTabChange("prompts")}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+                activeTab === "prompts"
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <FileCode2 className="size-4" />
+              System Prompts
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "analytics"}
+              onClick={() => handleTabChange("analytics")}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
                 activeTab === "analytics"
                   ? "bg-slate-950 text-white shadow-sm"
                   : "text-slate-600 hover:text-slate-900"
@@ -96,8 +129,22 @@ export default function AdminPage() {
           </div>
         </section>
 
-        {activeTab === "providers" ? <AiProviderDashboard /> : <AiAnalyticsDashboard />}
+        {activeTab === "providers" ? (
+          <AiProviderDashboard />
+        ) : activeTab === "prompts" ? (
+          <AiPromptDashboard />
+        ) : (
+          <AiAnalyticsDashboard />
+        )}
       </div>
     </main>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={<PageLoading label="Đang nạp dữ liệu trang quản trị…" />}>
+      <AdminPageContent />
+    </Suspense>
   );
 }

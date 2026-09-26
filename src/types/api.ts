@@ -669,4 +669,46 @@ export interface WeakTopicTimelineItem {
   daysToMaster?: number | null;
 }
 
+export type AiPromptStatus = "DRAFT" | "PUBLISHED" | "ACTIVE" | "ARCHIVED";
+
+export interface AiPromptResponse {
+  id: string;
+  purpose: AiPurpose;
+  versionNumber: number;
+  content: string;
+  status: AiPromptStatus;
+  isActive: boolean;
+  isSystem?: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiPromptDefaultResponse {
+  purpose: AiPurpose;
+  content: string;
+}
+
+export interface CreateAiPromptDraftRequest {
+  purpose: AiPurpose;
+  content: string;
+}
+
+export interface UpdateAiPromptDraftRequest {
+  content: string;
+  version: number;
+}
+
+export interface AiPromptPreviewRequest {
+  purpose: AiPurpose;
+  content: string;
+  syntheticData?: Record<string, string>;
+}
+
+export interface AiPromptPreviewResponse {
+  renderedContent: string;
+  sampleData: Record<string, string>;
+}
+
 export * from "./evaluation";
+
