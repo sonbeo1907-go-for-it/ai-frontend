@@ -16,6 +16,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/states";
+import { Select } from "@/components/ui/field";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDateOnly } from "@/lib/format";
 import { useAuth } from "@/features/auth/auth-context";
@@ -43,9 +44,12 @@ export default function DashboardPage() {
   const [report, setReport] = useState<DashboardResource<DashboardReport>>(
     initialResource<DashboardReport>,
   );
-  const [roadmaps, setRoadmaps] = useState<DashboardResource<{ active: number; total: number }>>(
-    initialResource<{ active: number; total: number }>,
+  const [roadmaps, setRoadmaps] = useState<
+    DashboardResource<{ active: number; total: number; items: RoadmapSummary[] }>
+  >(
+    initialResource<{ active: number; total: number; items: RoadmapSummary[] }>,
   );
+  const [selectedRoadmapId, setSelectedRoadmapId] = useState("");
   const [plans, setPlans] = useState<DashboardResource<PageResponse<DailyPlanSummary>>>(
     initialResource<PageResponse<DailyPlanSummary>>,
   );
@@ -56,7 +60,7 @@ export default function DashboardPage() {
   const loadReport = useCallback(async () => {
     setReport((current) => ({ ...current, loading: true, error: "" }));
     try {
-      const data = await fetchDashboardReport();
+      const data = await fetchDashboardReport(selectedRoadmapId || undefined);
       setReport({ data, loading: false, error: "" });
     } catch (error) {
       setReport((current) => ({
@@ -65,19 +69,22 @@ export default function DashboardPage() {
         error: getErrorMessage(error),
       }));
     }
-  }, []);
+  }, [selectedRoadmapId]);
 
   const loadRoadmaps = useCallback(async () => {
     setRoadmaps((current) => ({ ...current, loading: true, error: "" }));
     try {
       const [allRoadmaps, activeRoadmaps] = await Promise.all([
         apiRequest<PageResponse<RoadmapSummary>>("/api/v1/roadmaps?page=0&size=1"),
-        apiRequest<PageResponse<RoadmapSummary>>("/api/v1/roadmaps?status=ACTIVE&page=0&size=1"),
+        apiRequest<PageResponse<RoadmapSummary>>(
+          "/api/v1/roadmaps?status=ACTIVE&page=0&size=100&sort=updatedAt,desc",
+        ),
       ]);
       setRoadmaps({
         data: {
           active: activeRoadmaps.totalElements,
           total: allRoadmaps.totalElements,
+          items: activeRoadmaps.content,
         },
         loading: false,
         error: "",
@@ -166,6 +173,29 @@ export default function DashboardPage() {
       </section>
 
       {/* US-REP-01: Thống Kê Tiến Độ, Streak & Thời Gian Học */}
+      {(roadmaps.data?.items.length ?? 0) > 1 ? (
+        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-black text-slate-800">Ngữ cảnh lộ trình</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Chọn lộ trình để xem tiến độ và mục tiêu cho những ngày chưa có kế hoạch.
+            </p>
+          </div>
+          <Select
+            className="sm:max-w-sm"
+            value={selectedRoadmapId}
+            onChange={(event) => setSelectedRoadmapId(event.target.value)}
+          >
+            <option value="">Lộ trình ACTIVE gần nhất</option>
+            {roadmaps.data?.items.map((roadmap) => (
+              <option key={roadmap.id} value={roadmap.id}>
+                {roadmap.title}
+              </option>
+            ))}
+          </Select>
+        </Card>
+      ) : null}
+
       {report.loading && !report.data ? (
         <DashboardSectionLoading label="Đang tải thống kê tiến độ & chuỗi học tập…" />
       ) : report.error && !report.data ? (

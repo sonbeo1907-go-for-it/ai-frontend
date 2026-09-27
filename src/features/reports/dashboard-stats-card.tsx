@@ -229,6 +229,7 @@ function StudyTimeSummaryCard({ studyTime }: { studyTime: DashboardReport["study
 
 function StudyTimeChartCard({ dailyPoints }: { dailyPoints: DailyStudyTimePoint[] }) {
   const [selectedPoint, setSelectedPoint] = useState<DailyStudyTimePoint | null>(null);
+  const distinctTargets = Array.from(new Set(dailyPoints.map((point) => point.targetMinutes)));
 
   // Compute max minutes to scale chart height
   const maxMinutes = Math.max(
@@ -251,7 +252,7 @@ function StudyTimeChartCard({ dailyPoints }: { dailyPoints: DailyStudyTimePoint[
         {selectedPoint && (
           <Badge tone="indigo" className="self-start sm:self-auto text-xs py-1 px-3">
             {selectedPoint.date} ({selectedPoint.dayOfWeek}): {selectedPoint.studyMinutes} phút ·{" "}
-            {selectedPoint.completedTasks} task xong
+            mục tiêu {selectedPoint.targetMinutes} phút · {selectedPoint.completedTasks} task xong
           </Badge>
         )}
       </div>
@@ -341,7 +342,9 @@ function StudyTimeChartCard({ dailyPoints }: { dailyPoints: DailyStudyTimePoint[
             </span>
           </div>
           <span className="text-[11px] text-slate-400">
-            Đường gạch ngang: Mục tiêu ngày ({dailyPoints[0]?.targetMinutes ?? 60} phút)
+            {distinctTargets.length > 1
+              ? "Đường gạch ngang: mục tiêu riêng của từng ngày"
+              : `Đường gạch ngang: mục tiêu ngày (${distinctTargets[0] ?? 60} phút)`}
           </span>
         </div>
       </div>

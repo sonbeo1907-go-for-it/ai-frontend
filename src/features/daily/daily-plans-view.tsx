@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { StudyDurationField } from "@/components/ui/study-duration-field";
 import { EmptyState, PageLoading, ProgressBar } from "@/components/ui/states";
 import { useAuth } from "@/features/auth/auth-context";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDateOnly, todayIso } from "@/lib/format";
 import { dailyPlanStatusLabels } from "@/lib/display-labels";
+import { formatStudyDuration, isValidStudyDuration } from "@/lib/study-duration";
 import type { DailyPlan, DailyPlanSummary, PageResponse, RoadmapSummary } from "@/types/api";
 
 export function DailyPlansView() {
@@ -209,10 +211,16 @@ function CreatePlanModal({
   const { show } = useToast();
   const router = useRouter();
   const [date, setDate] = useState(todayIso(timeZone));
-  const [minutes, setMinutes] = useState(defaultMinutes);
+  const [useInheritedBudget, setUseInheritedBudget] = useState(true);
+  const [minutes, setMinutes] = useState<number | undefined>(defaultMinutes);
   const [roadmapId, setRoadmapId] = useState("");
   const [loading, setLoading] = useState(false);
   const initialDate = todayIso(timeZone);
+  const selectedRoadmap = roadmaps.find((roadmap) => roadmap.id === roadmapId);
+  const inheritedMinutes = selectedRoadmap?.dailyCommitmentMinutes ?? defaultMinutes;
+  const inheritedSource = selectedRoadmap?.dailyCommitmentMinutes
+    ? `Lộ trình “${selectedRoadmap.title}”`
+    : "Mặc định tài khoản";
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -222,7 +230,7 @@ function CreatePlanModal({
         method: "POST",
         body: JSON.stringify({
           planDate: date,
-          availableMinutes: minutes,
+          availableMinutes: useInheritedBudget ? null : minutes,
           roadmapId: roadmapId || null,
         }),
       });
@@ -243,7 +251,11 @@ function CreatePlanModal({
       title="Tạo kế hoạch ngày"
       description="Kế hoạch mới bắt đầu ở DRAFT và chưa tự động tạo nhiệm vụ từ lộ trình."
       closeDisabled={loading}
-      confirmClose={date !== initialDate || minutes !== defaultMinutes || Boolean(roadmapId)}
+      confirmClose={
+        date !== initialDate ||
+        !useInheritedBudget ||
+        Boolean(roadmapId)
+      }
     >
       <form onSubmit={submit} className="space-y-5">
         <Field label="Ngày học">
@@ -253,14 +265,6 @@ function CreatePlanModal({
             onChange={(event) => setDate(event.target.value)}
             required
           />
-        </Field>
-        <Field label="Quỹ thời gian">
-          <Select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))}>
-            <option value={30}>30 phút</option>
-            <option value={60}>1 giờ</option>
-            <option value={120}>2 giờ</option>
-            <option value={180}>3 giờ</option>
-          </Select>
         </Field>
         <Field
           label="Lộ trình liên quan"
@@ -275,11 +279,56 @@ function CreatePlanModal({
             ))}
           </Select>
         </Field>
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-bold text-slate-700">Quỹ thời gian</legend>
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4">
+            <input
+              type="radio"
+              name="budget-mode"
+              className="mt-0.5"
+              checked={useInheritedBudget}
+              onChange={() => setUseInheritedBudget(true)}
+            />
+            <span>
+              <strong className="block text-sm text-slate-800">Dùng mức được đề xuất</strong>
+              <span className="mt-1 block text-xs text-slate-500">
+                {inheritedSource}: {formatStudyDuration(inheritedMinutes)}. Máy chủ sẽ xác nhận giá trị khi tạo.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4">
+            <input
+              type="radio"
+              name="budget-mode"
+              className="mt-0.5"
+              checked={!useInheritedBudget}
+              onChange={() => setUseInheritedBudget(false)}
+            />
+            <span>
+              <strong className="block text-sm text-slate-800">Tùy chỉnh cho ngày này</strong>
+              <span className="mt-1 block text-xs text-slate-500">
+                Chỉ thay đổi snapshot của phiên bản kế hoạch ngày mới.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+        {!useInheritedBudget ? (
+          <StudyDurationField
+            value={minutes}
+            onChange={setMinutes}
+            legend="Thời gian dành riêng cho ngày này"
+          />
+        ) : null}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="secondary" onClick={onClose}>
             Hủy
           </Button>
-          <Button type="submit" variant="success" loading={loading}>
+          <Button
+            type="submit"
+            variant="success"
+            loading={loading}
+            disabled={!useInheritedBudget && !isValidStudyDuration(minutes)}
+          >
             Tạo ngày mới
           </Button>
         </div>

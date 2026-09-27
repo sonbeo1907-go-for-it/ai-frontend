@@ -1,11 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Clock3, Globe2, UserRound } from "lucide-react";
+import { ArrowRight, Check, Globe2, UserRound } from "lucide-react";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/features/auth/auth-context";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
+import { StudyDurationField } from "@/components/ui/study-duration-field";
+import { isValidStudyDuration } from "@/lib/study-duration";
 import type { ProfileResponse } from "@/types/api";
 
 export function ProfileSetupForm() {
@@ -16,7 +18,11 @@ export function ProfileSetupForm() {
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Ho_Chi_Minh",
     [],
   );
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    displayName: string;
+    timeZone: string;
+    defaultDailyMinutes?: number;
+  }>({
     displayName: profile?.profile?.displayName || "",
     timeZone: profile?.profile?.timeZone || detected,
     defaultDailyMinutes: profile?.profile?.defaultDailyMinutes || 60,
@@ -96,20 +102,12 @@ export function ProfileSetupForm() {
               onChange={(event) => setForm({ ...form, timeZone: event.target.value })}
             />
           </Field>
-          <Field label="Thời lượng học mặc định">
-            <div className="grid grid-cols-3 gap-2">
-              {[30, 60, 120].map((minutes) => (
-                <button
-                  key={minutes}
-                  onClick={() => setForm({ ...form, defaultDailyMinutes: minutes })}
-                  className={`focus-ring flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold ${form.defaultDailyMinutes === minutes ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                >
-                  <Clock3 className="size-4" />
-                  {minutes} phút
-                </button>
-              ))}
-            </div>
-          </Field>
+          <StudyDurationField
+            value={form.defaultDailyMinutes}
+            onChange={(defaultDailyMinutes) => setForm({ ...form, defaultDailyMinutes })}
+            legend="Thời lượng học mặc định"
+            description="Đây là mức dự phòng cho tài khoản. Lộ trình hoặc kế hoạch của một ngày có thể dùng mức riêng."
+          />
           {error && (
             <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>
           )}
@@ -117,7 +115,13 @@ export function ProfileSetupForm() {
             <Button variant="secondary" size="lg" onClick={() => setStep(0)}>
               Quay lại
             </Button>
-            <Button variant="success" size="lg" loading={loading} onClick={() => void save()}>
+            <Button
+              variant="success"
+              size="lg"
+              loading={loading}
+              disabled={!isValidStudyDuration(form.defaultDailyMinutes)}
+              onClick={() => void save()}
+            >
               <Check className="size-4" />
               Lưu hồ sơ
             </Button>

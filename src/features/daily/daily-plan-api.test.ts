@@ -45,6 +45,18 @@ describe("dailyPlanApi task steps", () => {
       }),
     );
   });
+
+  it("updates a DRAFT version budget with optimistic concurrency", async () => {
+    await dailyPlanApi.updateBudget("plan-1", "version-1", 270, 6);
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/daily-plans/plan-1/versions/version-1/budget",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ availableMinutes: 270, entityVersion: 6 }),
+      }),
+    );
+  });
 });
 
 describe("dailyPlanApi task guidance", () => {
