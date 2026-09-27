@@ -5,14 +5,20 @@ import { useAuth } from "@/features/auth/auth-context";
 import { useToast } from "@/components/providers/toast-provider";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select } from "@/components/ui/field";
+import { Field, Input } from "@/components/ui/field";
+import { StudyDurationField } from "@/components/ui/study-duration-field";
+import { isValidStudyDuration } from "@/lib/study-duration";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import type { ProfileResponse } from "@/types/api";
 
 export default function ProfilePage() {
   const { profile, refreshProfile } = useAuth();
   const { show } = useToast();
-  const [form, setForm] = useState(() => ({
+  const [form, setForm] = useState<{
+    displayName: string;
+    timeZone: string;
+    defaultDailyMinutes?: number;
+  }>(() => ({
     displayName: profile?.profile?.displayName ?? "",
     timeZone: profile?.profile?.timeZone ?? "",
     defaultDailyMinutes: profile?.profile?.defaultDailyMinutes ?? 60,
@@ -92,19 +98,17 @@ export default function ProfilePage() {
               />
             </div>
           </Field>
-          <Field label="Thời lượng học mặc định">
-            <Select
-              value={form.defaultDailyMinutes}
-              onChange={(event) =>
-                setForm({ ...form, defaultDailyMinutes: Number(event.target.value) })
-              }
-            >
-              <option value={30}>30 phút/ngày</option>
-              <option value={60}>60 phút/ngày</option>
-              <option value={120}>120 phút/ngày</option>
-            </Select>
-          </Field>
-          <Button type="submit" loading={saving}>
+          <StudyDurationField
+            value={form.defaultDailyMinutes}
+            onChange={(defaultDailyMinutes) => setForm({ ...form, defaultDailyMinutes })}
+            legend="Thời lượng học mặc định"
+            description="Dùng làm mức dự phòng khi lộ trình hoặc kế hoạch ngày không đặt quỹ thời gian riêng."
+          />
+          <Button
+            type="submit"
+            loading={saving}
+            disabled={!isValidStudyDuration(form.defaultDailyMinutes)}
+          >
             <Save className="size-4" />
             Lưu thay đổi
           </Button>

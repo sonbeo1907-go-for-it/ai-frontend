@@ -67,6 +67,20 @@ export const dailyPlanApi = {
       body: JSON.stringify(input),
     }),
 
+  updateBudget: (
+    planId: string,
+    versionId: string,
+    availableMinutes: number,
+    entityVersion: number,
+  ) =>
+    apiRequest<DailyPlanVersion>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/budget`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ availableMinutes, entityVersion }),
+      },
+    ),
+
   updateTask: (
     planId: string,
     versionId: string,

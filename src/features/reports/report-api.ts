@@ -1,8 +1,9 @@
 import { apiRequest } from "@/lib/api-client";
 import type { DashboardReport, KnowledgeMapResponse, WeakTopicTimelineItem } from "@/types/api";
 
-export async function fetchDashboardReport(): Promise<DashboardReport> {
-  return apiRequest<DashboardReport>("/api/v1/reports/dashboard");
+export async function fetchDashboardReport(roadmapId?: string): Promise<DashboardReport> {
+  const query = roadmapId ? `?roadmapId=${encodeURIComponent(roadmapId)}` : "";
+  return apiRequest<DashboardReport>(`/api/v1/reports/dashboard${query}`);
 }
 
 export async function fetchKnowledgeMap(roadmapId?: string): Promise<KnowledgeMapResponse> {

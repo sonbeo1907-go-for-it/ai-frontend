@@ -20,10 +20,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { StudyDurationField } from "@/components/ui/study-duration-field";
 import { PageLoading, ProgressBar } from "@/components/ui/states";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDateOnly } from "@/lib/format";
 import { dailyPlanStatusLabels, versionStatusLabels } from "@/lib/display-labels";
+import { isValidStudyDuration } from "@/lib/study-duration";
 import type {
   DailyPlan,
   DailyPlanItem,
@@ -75,6 +77,8 @@ export function DailyPlanDetailView() {
   const [evaluation, setEvaluation] = useState<DailyEvaluation | null>(null);
   const [availableLearningUnits, setAvailableLearningUnits] = useState<AvailableLearningUnit[]>([]);
   const [learningUnitsLoading, setLearningUnitsLoading] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const [budgetMinutes, setBudgetMinutes] = useState<number | undefined>();
   const load = useCallback(async () => {
     await Promise.resolve();
     setLoading(true);
@@ -289,6 +293,32 @@ export function DailyPlanDetailView() {
       setSelectedId(created.id);
     }, "Đã tạo phiên bản DRAFT mới; phiên bản ACTIVE chưa bị thay đổi.");
   }
+  function openBudgetEditor() {
+    if (!version || version.status !== "DRAFT") return;
+    setBudgetMinutes(version.availableMinutes);
+    setBudgetOpen(true);
+  }
+  async function saveBudget() {
+    if (!version || !isValidStudyDuration(budgetMinutes)) return;
+    setBusy(true);
+    try {
+      const updated = await dailyPlanApi.updateBudget(
+        id,
+        version.id,
+        budgetMinutes,
+        version.entityVersion,
+      );
+      setVersions((current) =>
+        current.map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+      );
+      setBudgetOpen(false);
+      show("Đã cập nhật quỹ thời gian cho phiên bản DRAFT này.");
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function handleGenerateAiDraft() {
     if (!canGenerateAi) return;
     if (currentDraft && currentDraft.items.length > 0) {
@@ -420,6 +450,12 @@ export function DailyPlanDetailView() {
                       ? "Sinh lại kế hoạch AI"
                       : "Sinh kế hoạch AI"}
               </Button>
+              {editable && (
+                <Button variant="secondary" onClick={openBudgetEditor}>
+                  <Timer className="size-4" />
+                  Chỉnh quỹ thời gian
+                </Button>
+              )}
               {editable && (
                 <Button variant="secondary" onClick={() => void openAddTask()}>
                   <Plus className="size-4" />
@@ -615,6 +651,37 @@ export function DailyPlanDetailView() {
           }}
         />
       )}
+      {version && budgetOpen ? (
+        <Modal
+          open
+          onClose={() => setBudgetOpen(false)}
+          title="Chỉnh quỹ thời gian"
+          description="Giá trị này chỉ thuộc phiên bản DRAFT đang chọn. AI sẽ dùng đúng snapshot này cho lần sinh tiếp theo."
+          closeDisabled={busy}
+          confirmClose={budgetMinutes !== version.availableMinutes}
+        >
+          <div className="space-y-5">
+            <StudyDurationField
+              value={budgetMinutes}
+              onChange={setBudgetMinutes}
+              legend="Thời gian có thể học trong ngày"
+            />
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="secondary" onClick={() => setBudgetOpen(false)}>
+                Hủy
+              </Button>
+              <Button
+                type="button"
+                loading={busy}
+                disabled={!isValidStudyDuration(budgetMinutes)}
+                onClick={() => void saveBudget()}
+              >
+                Lưu quỹ thời gian
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
       {version && editTaskTarget && (
         <EditTaskModal
           open

@@ -200,6 +200,7 @@ export interface RoadmapSummary {
   title: string;
   description?: string;
   status: RoadmapStatus;
+  dailyCommitmentMinutes?: number;
   activeVersionId?: string;
   versionCount: number;
   latestVersionNumber?: number;

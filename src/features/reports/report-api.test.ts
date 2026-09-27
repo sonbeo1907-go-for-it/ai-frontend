@@ -27,6 +27,12 @@ describe("report-api", () => {
       "/api/v1/reports/dashboard",
       expect.objectContaining({ cache: "no-store" }),
     );
+
+    await fetchDashboardReport("roadmap-dashboard");
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/reports/dashboard?roadmapId=roadmap-dashboard",
+      expect.objectContaining({ cache: "no-store" }),
+    );
   });
 
   it("fetchKnowledgeMap calls /api/v1/reports/knowledge-map with optional roadmapId", async () => {
