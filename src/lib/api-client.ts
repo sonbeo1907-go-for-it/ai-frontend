@@ -1,16 +1,23 @@
 import type {
   AiExecutionAnalytics,
+  AiPromptDefaultResponse,
+  AiPromptPreviewRequest,
+  AiPromptPreviewResponse,
+  AiPromptResponse,
   AiProvider,
   AiProviderConfig,
   AiProviderCredential,
   AiProviderConnectionTestResult,
+  AiPurpose,
   ApiErrorBody,
   ApiResponse,
+  CreateAiPromptDraftRequest,
   CreateAiProviderCredentialInput,
   CreateAiProviderConfigInput,
   CreateAiProviderInput,
   ProfileResponse,
   TokenResponse,
+  UpdateAiPromptDraftRequest,
   UpdateAiProviderCredentialInput,
   UpdateAiProviderConfigInput,
   UpdateAiProviderInput,
@@ -270,6 +277,60 @@ export const aiAnalyticsApi = {
     );
   },
 };
+
+export const ADMIN_AI_PROMPTS_PATH = "/api/v1/admin/ai-prompts";
+
+function promptPath(promptId: string) {
+  return `${ADMIN_AI_PROMPTS_PATH}/${promptId}`;
+}
+
+export const aiPromptApi = {
+  listByPurpose: (purpose: AiPurpose) =>
+    apiRequest<AiPromptResponse[]>(
+      `${ADMIN_AI_PROMPTS_PATH}?purpose=${encodeURIComponent(purpose)}`,
+    ),
+  getById: (promptId: string) => apiRequest<AiPromptResponse>(promptPath(promptId)),
+  createDraft: (input: CreateAiPromptDraftRequest) =>
+    apiRequest<AiPromptResponse>(ADMIN_AI_PROMPTS_PATH, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateDraft: (promptId: string, input: UpdateAiPromptDraftRequest) =>
+    apiRequest<AiPromptResponse>(promptPath(promptId), {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  publish: (promptId: string, version: number) =>
+    apiRequest<AiPromptResponse>(
+      `${promptPath(promptId)}/publish?version=${encodeURIComponent(version)}`,
+      { method: "POST" },
+    ),
+  activate: (promptId: string, version: number) =>
+    apiRequest<AiPromptResponse>(
+      `${promptPath(promptId)}/activate?version=${encodeURIComponent(version)}`,
+      { method: "POST" },
+    ),
+  rollback: (promptId: string, version: number) =>
+    apiRequest<AiPromptResponse>(
+      `${promptPath(promptId)}/rollback?version=${encodeURIComponent(version)}`,
+      { method: "POST" },
+    ),
+  archive: (promptId: string, version: number) =>
+    apiRequest<void>(
+      `${promptPath(promptId)}?version=${encodeURIComponent(version)}`,
+      { method: "DELETE" },
+    ),
+  preview: (input: AiPromptPreviewRequest) =>
+    apiRequest<AiPromptPreviewResponse>(`${ADMIN_AI_PROMPTS_PATH}/preview`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  getDefault: (purpose: AiPurpose) =>
+    apiRequest<AiPromptDefaultResponse>(
+      `${ADMIN_AI_PROMPTS_PATH}/default?purpose=${encodeURIComponent(purpose)}`,
+    ),
+};
+
 
 export function getErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) {
