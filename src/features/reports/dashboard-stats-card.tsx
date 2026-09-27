@@ -7,7 +7,6 @@ import {
   Award,
   BookOpen,
   ArrowRight,
-  Brain,
   Clock,
   CheckCircle2,
   TrendingUp,
