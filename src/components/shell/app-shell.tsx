@@ -15,6 +15,7 @@ import {
   Menu,
   Plus,
   Settings2,
+  Target,
   X,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/auth-context";
@@ -24,7 +25,7 @@ import { cn } from "@/lib/cn";
 const navigation = [
   { href: "/roadmaps", label: "Lộ trình", icon: BookOpen },
   { href: "/daily-plans", label: "Kế hoạch ngày", icon: CalendarDays },
-  { href: "/knowledge-map", label: "Bản đồ tri thức", icon: Brain },
+  { href: "/knowledge-map", label: "Tiến độ mục tiêu", icon: Target },
   { href: "/materials", label: "Tài liệu nguồn", icon: Files },
   { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/profile", label: "Hồ sơ", icon: Settings2 },
@@ -36,7 +37,7 @@ const pageMetadata: Record<string, { title: string; subtitle: string }> = {
     subtitle: "Tiếp tục từ nơi bạn đã dừng lại.",
   },
   "/knowledge-map": {
-    title: "Bản đồ Trí tuệ & Nhật ký Điểm yếu",
+    title: "Tiến độ mục tiêu & Nhật ký Điểm yếu",
     subtitle: "Xem lại danh sách nội dung đã làm chủ và hành trình vượt qua điểm yếu.",
   },
   "/roadmaps": {

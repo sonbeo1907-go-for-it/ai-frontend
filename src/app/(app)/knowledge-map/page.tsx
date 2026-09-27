@@ -8,6 +8,7 @@ import {
   RefreshCw,
   AlertCircle,
   BookOpen,
+  Target,
 } from "lucide-react";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { fetchKnowledgeMap, fetchWeakTopicsTimeline } from "@/features/reports/report-api";
@@ -99,18 +100,59 @@ export default function KnowledgeMapPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header with Title and Controls */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-            Bản Đồ Trí Tuệ & Nhật Ký Điểm Yếu
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Xem lại danh sách nội dung đã làm chủ và hành trình bền bỉ vượt qua khó khăn.
-          </p>
+      {/* Navigation Tabs & Controls */}
+      <div className="flex flex-col gap-4 border-b border-slate-200 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex">
+          <button
+            type="button"
+            onClick={() => setActiveTab("KNOWLEDGE_MAP")}
+            className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold transition ${
+              activeTab === "KNOWLEDGE_MAP"
+                ? "text-emerald-700 border-b-2 border-emerald-600"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <Target className="size-4" />
+            <span>Tiến độ mục tiêu</span>
+            {mapData.data && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  activeTab === "KNOWLEDGE_MAP"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {mapData.data.masteredTopics}/{mapData.data.totalTopics}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("WEAK_TOPICS")}
+            className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold transition ${
+              activeTab === "WEAK_TOPICS"
+                ? "text-emerald-700 border-b-2 border-emerald-600"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            <History className="size-4" />
+            <span>Nhật ký Điểm yếu (Timeline)</span>
+            {timelineData.data.length > 0 && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                  activeTab === "WEAK_TOPICS"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-slate-100 text-slate-600"
+                }`}
+              >
+                {timelineData.data.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 pb-3 sm:pb-0">
           {/* Roadmap Selector */}
           {roadmaps.length > 0 && (
             <div className="flex items-center gap-2">
@@ -142,62 +184,11 @@ export default function KnowledgeMapPage() {
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200">
-        <button
-          type="button"
-          onClick={() => setActiveTab("KNOWLEDGE_MAP")}
-          className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold transition ${
-            activeTab === "KNOWLEDGE_MAP"
-              ? "text-emerald-700 border-b-2 border-emerald-600"
-              : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <Brain className="size-4" />
-          <span>Bản đồ Trí tuệ (Knowledge Map)</span>
-          {mapData.data && (
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                activeTab === "KNOWLEDGE_MAP"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-slate-100 text-slate-600"
-              }`}
-            >
-              {mapData.data.masteredTopics}/{mapData.data.totalTopics}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("WEAK_TOPICS")}
-          className={`relative flex items-center gap-2 px-5 py-3 text-sm font-bold transition ${
-            activeTab === "WEAK_TOPICS"
-              ? "text-emerald-700 border-b-2 border-emerald-600"
-              : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <History className="size-4" />
-          <span>Nhật ký Điểm yếu (Timeline)</span>
-          {timelineData.data.length > 0 && (
-            <span
-              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                activeTab === "WEAK_TOPICS"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-slate-100 text-slate-600"
-              }`}
-            >
-              {timelineData.data.length}
-            </span>
-          )}
-        </button>
-      </div>
-
       {/* Content Area */}
       {isLoading ? (
         <div className="flex h-64 flex-col items-center justify-center gap-3">
           <LoaderCircle className="size-8 animate-spin text-emerald-600" />
-          <p className="text-sm font-medium text-slate-500">Đang tải bản đồ tri thức...</p>
+          <p className="text-sm font-medium text-slate-500">Đang tải tiến độ mục tiêu...</p>
         </div>
       ) : error ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center">
