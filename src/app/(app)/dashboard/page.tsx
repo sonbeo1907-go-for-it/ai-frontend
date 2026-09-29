@@ -22,6 +22,7 @@ import { formatDateOnly } from "@/lib/format";
 import { useAuth } from "@/features/auth/auth-context";
 import { fetchDashboardReport } from "@/features/reports/report-api";
 import { DashboardStatsSection } from "@/features/reports/dashboard-stats-card";
+import { DailyPlansHistoryStrip } from "@/features/daily/daily-plans-history-strip";
 import type { DailyPlanSummary, DashboardReport, Material, PageResponse, RoadmapSummary } from "@/types/api";
 
 type DashboardResource<T> = {
@@ -102,7 +103,7 @@ export default function DashboardPage() {
     setPlans((current) => ({ ...current, loading: true, error: "" }));
     try {
       const data = await apiRequest<PageResponse<DailyPlanSummary>>(
-        "/api/v1/daily-plans?page=0&size=4&sort=planDate,desc",
+        "/api/v1/daily-plans?page=0&size=1&sort=planDate,desc",
       );
       setPlans({ data, loading: false, error: "" });
     } catch (error) {
@@ -138,7 +139,6 @@ export default function DashboardPage() {
   }, [loadMaterials, loadPlans, loadReport, loadRoadmaps]);
 
   const activeRoadmaps = roadmaps.data?.active ?? 0;
-  const recentPlans = plans.data?.content ?? [];
   const name = profile?.profile?.displayName?.split(" ").at(-1) ?? "bạn";
   return (
     <div className="space-y-7 animate-fade-up">
@@ -238,87 +238,38 @@ export default function DashboardPage() {
           onRetry={() => void loadMaterials()}
         />
       </section>
-      <section className="grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-black tracking-tight">Kế hoạch gần đây</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Tiến độ tính từ trạng thái thực tế của từng nhiệm vụ.
-              </p>
-            </div>
-            <Link href="/daily-plans" className="text-sm font-bold text-indigo-600">
-              Xem tất cả
-            </Link>
-          </div>
-          <div className="mt-5 space-y-3">
-            {plans.loading && !plans.data ? (
-              <DashboardSectionLoading label="Đang tải kế hoạch gần đây…" />
-            ) : plans.error && !plans.data ? (
-              <DashboardSectionError message={plans.error} onRetry={() => void loadPlans()} />
-            ) : recentPlans.length ? (
-              recentPlans.map((plan) => (
-                <Link
-                  key={plan.id}
-                  href={`/daily-plans/${plan.id}`}
-                  className="block rounded-2xl border border-slate-200 p-4 transition hover:border-indigo-200 hover:bg-indigo-50/30"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-900">
-                        {formatDateOnly(plan.planDate)}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {plan.completedItemsCount}/{plan.totalItemsCount} nhiệm vụ ·{" "}
-                        {plan.totalPlannedMinutes} phút
-                      </p>
-                    </div>
-                    <span className="text-sm font-black text-indigo-700">
-                      {plan.completionPercentage}%
-                    </span>
-                  </div>
-                  <div className="mt-3">
-                    <ProgressBar value={plan.completionPercentage} />
-                  </div>
-                </Link>
-              ))
-            ) : (
-              <p className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-500">
-                Bạn chưa tạo kế hoạch ngày nào.
-              </p>
-            )}
-            {plans.error && plans.data && (
-              <DashboardSectionError message={plans.error} onRetry={() => void loadPlans()} />
-            )}
-          </div>
-        </Card>
-        <Card className="p-6">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-5 text-indigo-600" />
-            <h3 className="text-lg font-black tracking-tight">Bắt đầu nhanh</h3>
-          </div>
-          <div className="mt-5 space-y-3">
-            <QuickLink
-              href="/roadmaps"
-              icon={BookOpen}
-              title="Xây dựng lộ trình"
-              detail="Thêm cột mốc và chủ đề thủ công"
-            />
-            <QuickLink
-              href="/materials"
-              icon={Files}
-              title="Thêm tài liệu"
-              detail="PDF, DOCX, TXT hoặc văn bản"
-            />
-            <QuickLink
-              href="/daily-plans"
-              icon={Clock3}
-              title="Lên kế hoạch hôm nay"
-              detail="Checklist và Pomodoro 25 phút"
-            />
-          </div>
-        </Card>
+      {/* US: Lịch sử & Thống kê theo ngày chuyển về trang tổng quan */}
+      <section className="rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-7 shadow-xs">
+        <DailyPlansHistoryStrip timeZone={profile?.profile?.timeZone} />
       </section>
+
+      {/* Bắt đầu nhanh */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="size-5 text-indigo-600" />
+          <h3 className="text-lg font-black tracking-tight">Bắt đầu nhanh</h3>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <QuickLink
+            href="/roadmaps"
+            icon={BookOpen}
+            title="Xây dựng lộ trình"
+            detail="Thêm cột mốc và chủ đề thủ công"
+          />
+          <QuickLink
+            href="/materials"
+            icon={Files}
+            title="Thêm tài liệu"
+            detail="PDF, DOCX, TXT hoặc văn bản"
+          />
+          <QuickLink
+            href="/daily-plans"
+            icon={Clock3}
+            title="Lên kế hoạch hôm nay"
+            detail="Bảng Kanban và Pomodoro 25 phút"
+          />
+        </div>
+      </Card>
     </div>
   );
 }

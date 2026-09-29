@@ -10,7 +10,12 @@ export type MaterialStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED";
 export type DailyPlanStatus = "DRAFT" | "READY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 export type DailyTaskCategory = "REVIEW" | "NEW_MATERIAL" | "PRACTICE" | "CUSTOM";
 export type DailyTaskStatus =
-  "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "REVIEWING"
+  | "COMPLETED"
+  | "PARTIALLY_COMPLETED"
+  | "SKIPPED";
 export type ProgressEntryStatus = "COMPLETED" | "PARTIALLY_COMPLETED" | "SKIPPED";
 export type RoadmapItemProgressStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 export type RoadmapItemType = "MILESTONE" | "TOPIC" | "LEARNING_UNIT";

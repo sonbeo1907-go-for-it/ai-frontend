@@ -1,6 +1,7 @@
 import type {
   DailyPlanStatus,
   DailyTaskCategory,
+  DailyTaskStatus,
   ProgressEntryStatus,
   RoadmapItemProgressStatus,
   RoadmapStatus,
@@ -51,6 +52,15 @@ export const roadmapProgressStatusLabels: Record<RoadmapItemProgressStatus, stri
 };
 
 export const progressOutcomeLabels: Record<ProgressEntryStatus, string> = {
+  COMPLETED: "Hoàn thành",
+  PARTIALLY_COMPLETED: "Hoàn thành một phần",
+  SKIPPED: "Bỏ qua",
+};
+
+export const dailyTaskStatusLabels: Record<DailyTaskStatus, string> = {
+  NOT_STARTED: "Chưa hoàn thành",
+  IN_PROGRESS: "Đang thực hiện",
+  REVIEWING: "Đang xem xét",
   COMPLETED: "Hoàn thành",
   PARTIALLY_COMPLETED: "Hoàn thành một phần",
   SKIPPED: "Bỏ qua",

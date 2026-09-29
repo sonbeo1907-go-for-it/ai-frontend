@@ -2,11 +2,15 @@ import { apiRequest } from "@/lib/api-client";
 import type {
   AiExecution,
   AvailableLearningUnit,
+  DailyPlan,
   DailyPlanItem,
+  DailyPlanSummary,
   DailyPlanTaskStepsResponse,
   DailyPlanTaskProgressHistory,
   DailyPlanVersion,
   DailyTaskCategory,
+  DailyTaskStatus,
+  PageResponse,
   ProgressEntry,
   ProgressEntryStatus,
   TaskGuidanceOverview,
@@ -58,6 +62,9 @@ function idempotencyHeaders(idempotencyKey: string) {
 }
 
 export const dailyPlanApi = {
+  getTodayPlan: () =>
+    apiRequest<DailyPlan>("/api/v1/daily-plans/today"),
+
   getAvailableLearningUnits: (planId: string) =>
     apiRequest<AvailableLearningUnit[]>(`/api/v1/daily-plans/${planId}/available-learning-units`),
 
@@ -241,5 +248,21 @@ export const dailyPlanApi = {
         headers: idempotencyHeaders(idempotencyKey),
         body: JSON.stringify(input),
       },
+    ),
+
+  updateTaskStatus: (
+    planId: string,
+    itemId: string,
+    status: DailyTaskStatus,
+    actualMinutes?: number,
+  ) =>
+    apiRequest<DailyPlanItem>(`/api/v1/daily-plans/${planId}/items/${itemId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, actualMinutes }),
+    }),
+
+  getUserDailyPlans: (page = 0, size = 12) =>
+    apiRequest<PageResponse<DailyPlanSummary>>(
+      `/api/v1/daily-plans?page=${page}&size=${size}&sort=planDate,desc`,
     ),
 };

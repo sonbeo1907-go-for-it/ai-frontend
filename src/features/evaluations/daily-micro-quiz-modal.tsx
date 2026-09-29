@@ -142,14 +142,41 @@ export function DailyMicroQuizModal({
     };
   }, [open, dailyPlanId, dailyPlanVersionId, show]);
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (quizExecution.submitting || quizExecution.active) return;
     try {
       await quizExecution.generate();
     } catch (error) {
       show(getErrorMessage(error), "error");
     }
-  };
+  }, [quizExecution, show]);
+
+  // Auto-generate quiz when modal opens and no quiz exists yet for this plan version
+  useEffect(() => {
+    if (
+      !open ||
+      loading ||
+      quizExecution.recovering ||
+      quizExecution.active ||
+      quizExecution.submitting ||
+      quizExecution.execution?.status === "FAILED" ||
+      currentQuiz ||
+      !dailyPlanVersionId
+    ) {
+      return;
+    }
+    void handleGenerate();
+  }, [
+    open,
+    loading,
+    quizExecution.recovering,
+    quizExecution.active,
+    quizExecution.submitting,
+    quizExecution.execution?.status,
+    currentQuiz,
+    dailyPlanVersionId,
+    handleGenerate,
+  ]);
 
   if (!open) return null;
 

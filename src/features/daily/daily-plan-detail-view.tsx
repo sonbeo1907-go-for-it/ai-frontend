@@ -32,6 +32,7 @@ import type {
   DailyPlanTaskStepsResponse,
   DailyPlanVersion,
   DailyTaskCategory,
+  DailyTaskStatus,
   ProgressEntryStatus,
   DailyEvaluation,
   AvailableLearningUnit,
@@ -46,8 +47,8 @@ import { useDailyPlanAiExecution } from "./use-daily-plan-ai-execution";
 import { dailyPlanApi, type ProgressInput } from "./daily-plan-api";
 import { LearningUnitPicker } from "./learning-unit-picker";
 import { DailyPlanProgressHistoryModal, ProgressHistoryModal } from "./progress-history-modal";
-import { DailyPlanTaskCard } from "./daily-plan-task-card";
 import { TaskStepDialog } from "./task-steps/task-step-dialog";
+import { DailyPlanKanbanBoard } from "./daily-plan-kanban-board";
 
 export function DailyPlanDetailView() {
   const { id } = useParams<{ id: string }>();
@@ -159,7 +160,14 @@ export function DailyPlanDetailView() {
   const items = version?.items ?? [];
   const earned = items.reduce(
     (sum, item) =>
-      sum + (item.status === "COMPLETED" ? 100 : item.status === "PARTIALLY_COMPLETED" ? 50 : 0),
+      sum +
+      (item.status === "COMPLETED"
+        ? 100
+        : item.status === "REVIEWING"
+          ? 75
+          : item.status === "PARTIALLY_COMPLETED"
+            ? 50
+            : 0),
     0,
   );
   const completion = items.length ? Math.round((earned / items.length) * 10) / 10 : 0;
@@ -285,6 +293,41 @@ export function DailyPlanDetailView() {
       return false;
     }
   }
+
+  async function handleMoveTaskStatus(itemId: string, newStatus: DailyTaskStatus) {
+    if (!version) return;
+    setVersions((current) =>
+      current.map((v) => {
+        if (v.id !== version.id) return v;
+        return {
+          ...v,
+          items: v.items.map((it) => (it.id === itemId ? { ...it, status: newStatus } : it)),
+        };
+      }),
+    );
+
+    try {
+      await dailyPlanApi.updateTaskStatus(id, itemId, newStatus);
+      const label =
+        newStatus === "COMPLETED"
+          ? "Hoàn thành"
+          : newStatus === "REVIEWING"
+            ? "Đang xem xét"
+            : newStatus === "IN_PROGRESS"
+              ? "Đang thực hiện"
+              : "Chưa hoàn thành";
+      show(`Đã chuyển trạng thái sang "${label}".`);
+      await load();
+
+      if (newStatus === "REVIEWING" && !evaluation?.quizPassed) {
+        setQuizModalOpen(true);
+      }
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+      await load();
+    }
+  }
+
   async function createDraft() {
     await action(async () => {
       const created = await apiRequest<DailyPlanVersion>(`/api/v1/daily-plans/${id}/versions`, {
@@ -395,19 +438,27 @@ export function DailyPlanDetailView() {
     );
   return (
     <div className="space-y-6 animate-fade-up">
-      <button
-        onClick={() => router.push("/daily-plans")}
-        className="focus-ring inline-flex items-center gap-2 rounded-lg text-sm font-bold text-slate-500 hover:text-indigo-700"
-      >
-        <ArrowLeft className="size-4" />
-        Lịch sử kế hoạch
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="focus-ring inline-flex items-center gap-1.5 rounded-lg text-sm font-bold text-slate-500 hover:text-indigo-700 transition"
+        >
+          <ArrowLeft className="size-4" />
+          Về trang tổng quan
+        </button>
+        <button
+          onClick={() => router.push("/daily-plans")}
+          className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition"
+        >
+          Xem danh sách ngày
+        </button>
+      </div>
       <Card className="overflow-hidden">
         <div className="h-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
         <div className="p-6 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   tone={
                     plan.status === "IN_PROGRESS"
@@ -420,6 +471,30 @@ export function DailyPlanDetailView() {
                   {dailyPlanStatusLabels[plan.status]}
                 </Badge>
                 <Badge>{plan.timeZoneSnapshot}</Badge>
+                {versions.length > 1 ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-500">Phiên bản:</span>
+                    <select
+                      value={selectedId ?? ""}
+                      onChange={(e) => {
+                        setStepTargetId(null);
+                        setSelectedId(e.target.value);
+                      }}
+                      className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-xs"
+                      aria-label="Chọn phiên bản kế hoạch"
+                    >
+                      {versions.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          v{v.versionNumber} ({versionStatusLabels[v.status]} - {v.items.length} task)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : version ? (
+                  <Badge tone={version.status === "ACTIVE" ? "emerald" : "indigo"}>
+                    v{version.versionNumber} ({versionStatusLabels[version.status]})
+                  </Badge>
+                ) : null}
               </div>
               <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">
                 {formatDateOnly(plan.planDate, {
@@ -489,7 +564,7 @@ export function DailyPlanDetailView() {
                   Pomodoro
                 </Button>
               )}
-              {items.some((item) => item.status === "COMPLETED") && (
+              {items.some((item) => item.status === "COMPLETED" || item.status === "REVIEWING") && (
                 <Button
                   onClick={() => setQuizModalOpen(true)}
                   className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 border-none shadow-[0_0_15px_rgba(245,158,11,0.35)]"
@@ -497,7 +572,7 @@ export function DailyPlanDetailView() {
                   <Sparkles className="size-4" />
                   {evaluation?.quizScore != null
                     ? `Xem lại Quiz (${evaluation.quizScore}%)`
-                    : "Làm Micro-Quiz cuối ngày"}
+                    : "Làm Micro-Quiz"}
                 </Button>
               )}
             </div>
@@ -521,17 +596,17 @@ export function DailyPlanDetailView() {
               value={`${version?.totalPlannedMinutes ?? 0} phút`}
             />
             {evaluation?.quizScore != null ? (
-              <Metric label="Micro-Quiz cuối ngày" value={`${evaluation.quizScore}%`}>
+              <Metric label="Micro-Quiz" value={`${evaluation.quizScore}%`}>
                 <Badge tone={evaluation.quizPassed ? "emerald" : "rose"}>
                   {evaluation.quizPassed ? "Đạt (≥ 80%)" : "Chưa đạt"}
                 </Badge>
               </Metric>
             ) : (
-              <Metric label="Micro-Quiz cuối ngày" value="Chưa làm">
-                {items.some((item) => item.status === "COMPLETED") ? (
+              <Metric label="Micro-Quiz" value="Chưa làm">
+                {items.some((item) => item.status === "COMPLETED" || item.status === "REVIEWING") ? (
                   <span className="text-xs font-semibold text-amber-600">Sẵn sàng làm bài</span>
                 ) : (
-                  <span className="text-xs font-medium text-slate-400">Cần hoàn thành task</span>
+                  <span className="text-xs font-medium text-slate-400">Cần task xem xét/xong</span>
                 )}
               </Metric>
             )}
@@ -545,96 +620,88 @@ export function DailyPlanDetailView() {
         onRefresh={refreshAiStatus}
         onDismiss={dismissAiFailure}
       />
-      <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">
-        <Card className="h-fit p-4">
-          <h3 className="px-2 py-1 text-sm font-black">Phiên bản kế hoạch</h3>
-          <div className="mt-3 grid gap-2">
-            {versions.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setStepTargetId(null);
-                  setSelectedId(item.id);
-                }}
-                className={`focus-ring rounded-xl border p-3 text-left ${selectedId === item.id ? "border-indigo-300 bg-indigo-50" : "border-transparent hover:bg-slate-50"}`}
-              >
-                <div className="flex items-center justify-between">
-                  <strong className="text-sm">Version {item.versionNumber}</strong>
-                  <Badge
-                    tone={
-                      item.status === "ACTIVE"
-                        ? "emerald"
-                        : item.status === "DRAFT"
-                          ? "indigo"
-                          : "slate"
-                    }
-                  >
-                    {versionStatusLabels[item.status]}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {item.items.length} nhiệm vụ · {item.totalPlannedMinutes} phút
-                </p>
-              </button>
-            ))}
+      <div className="space-y-4">
+        {version?.requiresUserDecision && (
+          <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-amber-900 ring-1 ring-inset ring-amber-500/20">
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+            <div>
+              <h4 className="font-bold text-amber-800">⚠ Kế hoạch cần bạn quyết định</h4>
+              <p className="mt-1 text-sm leading-relaxed">
+                Kế hoạch đã nằm trong quỹ thời gian, nhưng AI có đề xuất chuyển tiếp, chia nhỏ,
+                dời lịch hoặc bỏ bớt nhiệm vụ. Hãy xem giải thích và chỉnh sửa nếu cần trước khi
+                kích hoạt.
+              </p>
+            </div>
           </div>
-        </Card>
-        <div className="space-y-3">
-          {version?.requiresUserDecision && (
-            <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-amber-900 ring-1 ring-inset ring-amber-500/20">
-              <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
-              <div>
-                <h4 className="font-bold text-amber-800">⚠ Kế hoạch cần bạn quyết định</h4>
-                <p className="mt-1 text-sm leading-relaxed">
-                  Kế hoạch đã nằm trong quỹ thời gian, nhưng AI có đề xuất chuyển tiếp, chia nhỏ,
-                  dời lịch hoặc bỏ bớt nhiệm vụ. Hãy xem giải thích và chỉnh sửa nếu cần trước khi
-                  kích hoạt.
-                </p>
-              </div>
+        )}
+        {version?.aiExplanation && (
+          <div className="flex items-start gap-3 rounded-2xl bg-indigo-50/50 p-4 text-indigo-900 ring-1 ring-inset ring-indigo-500/20">
+            <Sparkles className="mt-0.5 size-5 shrink-0 text-indigo-600" />
+            <div>
+              <h4 className="font-bold text-indigo-800">✨ AI đề xuất</h4>
+              <p className="mt-1 text-sm leading-relaxed">{version.aiExplanation}</p>
             </div>
-          )}
-          {version?.aiExplanation && (
-            <div className="flex items-start gap-3 rounded-2xl bg-indigo-50/50 p-4 text-indigo-900 ring-1 ring-inset ring-indigo-500/20">
-              <Sparkles className="mt-0.5 size-5 shrink-0 text-indigo-600" />
-              <div>
-                <h4 className="font-bold text-indigo-800">✨ AI đề xuất</h4>
-                <p className="mt-1 text-sm leading-relaxed">{version.aiExplanation}</p>
-              </div>
+          </div>
+        )}
+
+        {/* Clean Header for Kanban Board */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white p-3.5 border border-slate-200/80 shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-xl bg-indigo-50 text-indigo-700">
+              <ListChecks className="size-4" />
+            </span>
+            <div>
+              <h3 className="text-sm font-black text-slate-900">Bảng Kanban nhiệm vụ</h3>
+              <p className="text-[11px] text-slate-500">
+                Kéo thả thẻ nhiệm vụ hoặc bấm nút để chuyển trạng thái. Các bước làm là gợi ý tham khảo.
+              </p>
             </div>
-          )}
-          {items.length === 0 ? (
-            <Card className="grid min-h-72 place-items-center border-dashed p-8 text-center">
-              <div>
-                <ListChecks className="mx-auto size-10 text-slate-300" />
-                <h3 className="mt-4 font-black">Chưa có nhiệm vụ</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Thêm task thủ công vào phiên bản DRAFT này.
-                </p>
-                {editable && (
-                  <Button className="mt-5" onClick={() => void openAddTask()}>
-                    <Plus className="size-4" />
-                    Thêm nhiệm vụ
-                  </Button>
-                )}
-              </div>
-            </Card>
-          ) : (
-            items.map((item) => (
-              <DailyPlanTaskCard
-                key={item.id}
-                item={item}
-                editable={Boolean(editable)}
-                executable={Boolean(executable)}
-                onEdit={() => void openEditTask(item)}
-                onDelete={() => setDeleteTarget(item)}
-                onProgress={() => setProgressTarget(item)}
-                onHistory={() => void openProgressHistory(item)}
-                onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
-                onOpenSteps={() => setStepTargetId(item.id)}
-              />
-            ))
-          )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {editable && (
+              <Button size="sm" variant="success" onClick={() => void openAddTask()}>
+                <Plus className="size-3.5" />
+                Thêm nhiệm vụ
+              </Button>
+            )}
+          </div>
         </div>
+
+        {items.length === 0 ? (
+          <Card className="grid min-h-72 place-items-center border-dashed p-8 text-center">
+            <div>
+              <ListChecks className="mx-auto size-10 text-slate-300" />
+              <h3 className="mt-4 font-black">Chưa có nhiệm vụ</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Thêm task thủ công vào phiên bản DRAFT này hoặc chạy AI đề xuất.
+              </p>
+              {editable && (
+                <Button className="mt-5" onClick={() => void openAddTask()}>
+                  <Plus className="size-4" />
+                  Thêm nhiệm vụ
+                </Button>
+              )}
+            </div>
+          </Card>
+        ) : (
+          <DailyPlanKanbanBoard
+            items={items}
+            editable={Boolean(editable)}
+            executable={Boolean(executable)}
+            onMoveStatus={handleMoveTaskStatus}
+            onAddTask={() => void openAddTask()}
+            onEditTask={(item) => void openEditTask(item)}
+            onDeleteTask={(item) => setDeleteTarget(item)}
+            onProgress={(item) => setProgressTarget(item)}
+            onHistory={(item) => void openProgressHistory(item)}
+            onPomodoro={(item) => setPomodoro({ open: true, taskId: item.id })}
+            onOpenSteps={(item) => setStepTargetId(item.id)}
+            quizPassed={Boolean(evaluation?.quizPassed)}
+            quizScore={evaluation?.quizScore}
+            onOpenQuiz={() => setQuizModalOpen(true)}
+          />
+        )}
       </div>
       {version && addOpen && (
         <AddTaskModal

@@ -6,6 +6,8 @@ import {
   ChevronRight,
   Circle,
   Clock3,
+  GripVertical,
+  HelpCircle,
   History,
   Info,
   ListChecks,
@@ -60,6 +62,7 @@ export function DailyPlanTaskCard({
   const status = {
     NOT_STARTED: { label: "Chưa bắt đầu", tone: "slate" as const, icon: Circle },
     IN_PROGRESS: { label: "Đang thực hiện", tone: "indigo" as const, icon: MoreHorizontal },
+    REVIEWING: { label: "Đang xem xét", tone: "amber" as const, icon: HelpCircle },
     COMPLETED: { label: "Hoàn thành", tone: "emerald" as const, icon: Check },
     PARTIALLY_COMPLETED: {
       label: "Hoàn thành một phần",
