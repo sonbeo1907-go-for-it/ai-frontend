@@ -1,4 +1,7 @@
 import type {
+  AdminAiExecutionDetail,
+  AdminAiExecutionFilterParams,
+  AdminAiExecutionSummary,
   AiExecutionAnalytics,
   AiPromptDefaultResponse,
   AiPromptPreviewRequest,
@@ -15,6 +18,7 @@ import type {
   CreateAiProviderCredentialInput,
   CreateAiProviderConfigInput,
   CreateAiProviderInput,
+  PageResponse,
   ProfileResponse,
   TokenResponse,
   UpdateAiPromptDraftRequest,
@@ -328,6 +332,34 @@ export const aiPromptApi = {
   getDefault: (purpose: AiPurpose) =>
     apiRequest<AiPromptDefaultResponse>(
       `${ADMIN_AI_PROMPTS_PATH}/default?purpose=${encodeURIComponent(purpose)}`,
+    ),
+};
+
+export const ADMIN_AI_EXECUTIONS_PATH = "/api/v1/admin/ai-executions";
+
+export const adminAiExecutionApi = {
+  listExecutions: (params: AdminAiExecutionFilterParams = {}) => {
+    const search = new URLSearchParams();
+    if (params.from) search.set("from", params.from);
+    if (params.to) search.set("to", params.to);
+    if (params.providerId) search.set("providerId", params.providerId);
+    if (params.model) search.set("model", params.model);
+    if (params.purpose) search.set("purpose", params.purpose);
+    if (params.operation) search.set("operation", params.operation);
+    if (params.status) search.set("status", params.status);
+    if (params.failureCode) search.set("failureCode", params.failureCode);
+    if (params.page !== undefined) search.set("page", String(params.page));
+    if (params.size !== undefined) search.set("size", String(params.size));
+    if (params.sort) search.set("sort", params.sort);
+
+    const query = search.toString();
+    return apiRequest<PageResponse<AdminAiExecutionSummary>>(
+      query ? `${ADMIN_AI_EXECUTIONS_PATH}?${query}` : ADMIN_AI_EXECUTIONS_PATH,
+    );
+  },
+  getExecutionDetail: (executionId: string) =>
+    apiRequest<AdminAiExecutionDetail>(
+      `${ADMIN_AI_EXECUTIONS_PATH}/${encodeURIComponent(executionId)}`,
     ),
 };
 

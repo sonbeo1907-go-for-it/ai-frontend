@@ -223,6 +223,7 @@ export interface Material {
 export interface PageResponse<T> {
   content: T[];
   page: number;
+  number?: number;
   totalElements: number;
   totalPages: number;
   size: number;
@@ -711,6 +712,58 @@ export interface AiPromptPreviewRequest {
 export interface AiPromptPreviewResponse {
   renderedContent: string;
   sampleData: Record<string, string>;
+}
+
+export interface AdminAiExecutionSummary {
+  id: string;
+  providerId: string | null;
+  providerName: string | null;
+  model: string | null;
+  purpose: AiPurpose;
+  operation: AiExecutionOperation;
+  status: AiExecutionStatus;
+  failureCode: string | null;
+  createdAt: string;
+}
+
+export interface AdminAiExecutionTimelineEvent {
+  eventName: string;
+  timestamp: string | null;
+  synthetic: boolean;
+}
+
+export interface AdminAiExecutionDetail {
+  id: string;
+  providerId: string | null;
+  providerName: string | null;
+  model: string | null;
+  purpose: AiPurpose;
+  operation: AiExecutionOperation;
+  status: AiExecutionStatus;
+  attemptCount: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  latencyMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  failureCode: string | null;
+  failureMessage: string | null;
+  timeline: AdminAiExecutionTimelineEvent[];
+}
+
+export interface AdminAiExecutionFilterParams {
+  from?: string;
+  to?: string;
+  providerId?: string;
+  model?: string;
+  purpose?: string;
+  operation?: string;
+  status?: string;
+  failureCode?: string;
+  page?: number;
+  size?: number;
+  sort?: string;
 }
 
 export * from "./evaluation";
