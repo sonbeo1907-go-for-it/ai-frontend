@@ -16,8 +16,8 @@ import { useAuth } from "@/features/auth/auth-context";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDateOnly, todayIso } from "@/lib/format";
 import { dailyPlanStatusLabels } from "@/lib/display-labels";
-import type { DailyPlanSummary, PageResponse, RoadmapSummary } from "@/types/api";
-import { CreatePlanModal } from "./create-plan-modal";
+import { formatStudyDuration, isValidStudyDuration } from "@/lib/study-duration";
+import type { DailyPlan, DailyPlanSummary, PageResponse, RoadmapSummary } from "@/types/api";
 
 export function DailyPlansView() {
   const { profile } = useAuth();
@@ -56,37 +56,24 @@ export function DailyPlansView() {
 
   if (loading) return <PageLoading label="Đang tải lịch sử kế hoạch…" />;
 
-  const todayDateString = todayIso(profile?.profile?.timeZone);
-  const todayPlan = page?.content.find((p) => p.planDate === todayDateString);
-
   return (
     <div className="space-y-6 animate-fade-up">
       <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-4">
-          <span className="grid size-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-700">
+          <span className="grid size-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-700">
             <CalendarDays className="size-5" />
           </span>
           <div>
-            <h2 className="text-xl font-black tracking-tight">Kế hoạch học tập theo ngày</h2>
+            <h2 className="text-xl font-black tracking-tight">Biến ý định thành checklist</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Quản lý nhiệm vụ trực quan trên bảng Kanban: Chưa hoàn thành, Đang thực hiện, Hoàn thành.
+              Mỗi ngày có lịch sử phiên bản riêng và tiến độ thực tế tách khỏi nội dung kế hoạch.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {todayPlan && (
-            <Link
-              href={`/daily-plans/${todayPlan.id}`}
-              className="focus-ring inline-flex h-10 items-center gap-2 rounded-xl bg-indigo-50 px-4 text-xs font-black text-indigo-700 hover:bg-indigo-100 transition shadow-xs"
-            >
-              Mở hôm nay
-            </Link>
-          )}
-          <Button variant="success" onClick={() => setOpen(true)}>
-            <Plus className="size-4" />
-            Tạo ngày mới
-          </Button>
-        </div>
+        <Button variant="success" onClick={() => setOpen(true)}>
+          <Plus className="size-4" />
+          Tạo ngày mới
+        </Button>
       </Card>
 
       {(page?.content.length ?? 0) === 0 ? (
@@ -206,3 +193,146 @@ function PlanCard({ plan }: { plan: DailyPlanSummary }) {
   );
 }
 
+function CreatePlanModal({
+  open,
+  onClose,
+  onCreated,
+  roadmaps,
+  timeZone,
+  defaultMinutes,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+  roadmaps: RoadmapSummary[];
+  timeZone?: string;
+  defaultMinutes: number;
+}) {
+  const { show } = useToast();
+  const router = useRouter();
+  const [date, setDate] = useState(todayIso(timeZone));
+  const [useInheritedBudget, setUseInheritedBudget] = useState(true);
+  const [minutes, setMinutes] = useState<number | undefined>(defaultMinutes);
+  const [roadmapId, setRoadmapId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const initialDate = todayIso(timeZone);
+  const selectedRoadmap = roadmaps.find((roadmap) => roadmap.id === roadmapId);
+  const inheritedMinutes = selectedRoadmap?.dailyCommitmentMinutes ?? defaultMinutes;
+  const inheritedSource = selectedRoadmap?.dailyCommitmentMinutes
+    ? `Lộ trình “${selectedRoadmap.title}”`
+    : "Mặc định tài khoản";
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const plan = await apiRequest<DailyPlan>("/api/v1/daily-plans", {
+        method: "POST",
+        body: JSON.stringify({
+          planDate: date,
+          availableMinutes: useInheritedBudget ? null : minutes,
+          roadmapId: roadmapId || null,
+        }),
+      });
+      show("Kế hoạch DRAFT đã được tạo. Hãy thêm nhiệm vụ trước khi kích hoạt.");
+      await onCreated();
+      router.push(`/daily-plans/${plan.id}`);
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Tạo kế hoạch ngày"
+      description="Kế hoạch mới bắt đầu ở DRAFT và chưa tự động tạo nhiệm vụ từ lộ trình."
+      closeDisabled={loading}
+      confirmClose={
+        date !== initialDate ||
+        !useInheritedBudget ||
+        Boolean(roadmapId)
+      }
+    >
+      <form onSubmit={submit} className="space-y-5">
+        <Field label="Ngày học">
+          <Input
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            required
+          />
+        </Field>
+        <Field
+          label="Lộ trình liên quan"
+          hint="Không bắt buộc. Việc chọn lộ trình không tự động tạo task."
+        >
+          <Select value={roadmapId} onChange={(event) => setRoadmapId(event.target.value)}>
+            <option value="">Không liên kết</option>
+            {roadmaps.map((roadmap) => (
+              <option value={roadmap.id} key={roadmap.id}>
+                {roadmap.title || "Lộ trình từ khảo sát"}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-bold text-slate-700">Quỹ thời gian</legend>
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4">
+            <input
+              type="radio"
+              name="budget-mode"
+              className="mt-0.5"
+              checked={useInheritedBudget}
+              onChange={() => setUseInheritedBudget(true)}
+            />
+            <span>
+              <strong className="block text-sm text-slate-800">Dùng mức được đề xuất</strong>
+              <span className="mt-1 block text-xs text-slate-500">
+                {inheritedSource}: {formatStudyDuration(inheritedMinutes)}. Máy chủ sẽ xác nhận giá trị khi tạo.
+              </span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4">
+            <input
+              type="radio"
+              name="budget-mode"
+              className="mt-0.5"
+              checked={!useInheritedBudget}
+              onChange={() => setUseInheritedBudget(false)}
+            />
+            <span>
+              <strong className="block text-sm text-slate-800">Tùy chỉnh cho ngày này</strong>
+              <span className="mt-1 block text-xs text-slate-500">
+                Chỉ thay đổi snapshot của phiên bản kế hoạch ngày mới.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+        {!useInheritedBudget ? (
+          <StudyDurationField
+            value={minutes}
+            onChange={setMinutes}
+            legend="Thời gian dành riêng cho ngày này"
+          />
+        ) : null}
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button
+            type="submit"
+            variant="success"
+            loading={loading}
+            disabled={!useInheritedBudget && !isValidStudyDuration(minutes)}
+          >
+            Tạo ngày mới
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

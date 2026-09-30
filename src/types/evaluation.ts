@@ -33,6 +33,7 @@ export interface QuizDetail {
   passed?: boolean;
   submittedAt?: string;
   questions: QuizQuestion[];
+  coveredItemIds?: string[];
 }
 
 export interface AnswerSubmission {

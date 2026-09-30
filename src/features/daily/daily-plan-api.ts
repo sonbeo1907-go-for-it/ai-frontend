@@ -255,10 +255,15 @@ export const dailyPlanApi = {
     itemId: string,
     status: DailyTaskStatus,
     actualMinutes?: number,
+    manualFallbackReason?: string,
   ) =>
     apiRequest<DailyPlanItem>(`/api/v1/daily-plans/${planId}/items/${itemId}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ status, actualMinutes }),
+      body: JSON.stringify({
+        status,
+        ...(actualMinutes !== undefined ? { actualMinutes } : {}),
+        ...(manualFallbackReason !== undefined ? { manualFallbackReason } : {}),
+      }),
     }),
 
   getUserDailyPlans: (page = 0, size = 12) =>

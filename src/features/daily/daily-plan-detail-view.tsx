@@ -294,7 +294,12 @@ export function DailyPlanDetailView() {
     }
   }
 
-  async function handleMoveTaskStatus(itemId: string, newStatus: DailyTaskStatus) {
+  async function handleMoveTaskStatus(
+    itemId: string,
+    newStatus: DailyTaskStatus,
+    actualMinutes?: number,
+    manualFallbackReason?: string,
+  ) {
     if (!version) return;
     setVersions((current) =>
       current.map((v) => {
@@ -307,7 +312,7 @@ export function DailyPlanDetailView() {
     );
 
     try {
-      await dailyPlanApi.updateTaskStatus(id, itemId, newStatus);
+      await dailyPlanApi.updateTaskStatus(id, itemId, newStatus, actualMinutes, manualFallbackReason);
       const label =
         newStatus === "COMPLETED"
           ? "Hoàn thành"
@@ -318,10 +323,6 @@ export function DailyPlanDetailView() {
               : "Chưa hoàn thành";
       show(`Đã chuyển trạng thái sang "${label}".`);
       await load();
-
-      if (newStatus === "REVIEWING" && !evaluation?.quizPassed) {
-        setQuizModalOpen(true);
-      }
     } catch (error) {
       show(getErrorMessage(error), "error");
       await load();
@@ -695,6 +696,7 @@ export function DailyPlanDetailView() {
             onDeleteTask={(item) => setDeleteTarget(item)}
             onProgress={(item) => setProgressTarget(item)}
             onHistory={(item) => void openProgressHistory(item)}
+            onCorrection={(item) => void openProgressHistory(item)}
             onPomodoro={(item) => setPomodoro({ open: true, taskId: item.id })}
             onOpenSteps={(item) => setStepTargetId(item.id)}
             quizPassed={Boolean(evaluation?.quizPassed)}

@@ -257,6 +257,7 @@ export interface DailyPlanItem {
   aiAdjustmentReason?: string | null;
   steps: DailyPlanTaskStep[];
   stepProgress: TaskStepProgress;
+  unlockedForCompletion?: boolean;
 }
 
 export interface DailyPlanTaskStep {
