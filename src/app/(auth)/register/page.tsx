@@ -6,6 +6,13 @@ import { useAuth } from "@/features/auth/auth-context";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { getErrorMessage } from "@/lib/api-client";
+import { PasswordPolicyHints } from "@/components/auth/password-policy-hints";
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  validatePasswordPolicy,
+  extractPasswordErrorMessage,
+} from "@/lib/password-policy";
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -13,31 +20,34 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const checks = [
-    { label: "Ít nhất 8 ký tự", ok: form.password.length >= 8 },
-    {
-      label: "Có chữ hoa và chữ thường",
-      ok: /[A-Z]/.test(form.password) && /[a-z]/.test(form.password),
-    },
-    { label: "Có ít nhất một chữ số", ok: /\d/.test(form.password) },
-  ];
+
+  const { isValid: isPasswordValid } = validatePasswordPolicy(form.password);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+
+    if (!isPasswordValid) {
+      setError("Mật khẩu chưa thỏa mãn chính sách bảo mật.");
+      return;
+    }
+
     if (form.password !== form.confirm) {
       setError("Mật khẩu xác nhận không khớp.");
       return;
     }
+
     setLoading(true);
     try {
       await register(form.email.trim().toLowerCase(), form.password, form.displayName.trim());
       setDone(true);
     } catch (nextError) {
-      setError(getErrorMessage(nextError));
+      setError(extractPasswordErrorMessage(nextError, "password") || getErrorMessage(nextError));
     } finally {
       setLoading(false);
     }
   }
+
   if (done)
     return (
       <div className="w-full max-w-md text-center animate-fade-up">
@@ -56,6 +66,7 @@ export default function RegisterPage() {
         </Link>
       </div>
     );
+
   return (
     <div className="w-full max-w-md animate-fade-up">
       <p className="text-sm font-bold uppercase tracking-[.16em] text-indigo-600">
@@ -95,22 +106,12 @@ export default function RegisterPage() {
             autoComplete="new-password"
             value={form.password}
             onChange={(event) => setForm({ ...form, password: event.target.value })}
-            minLength={8}
-            maxLength={100}
+            minLength={PASSWORD_MIN_LENGTH}
+            maxLength={PASSWORD_MAX_LENGTH}
             required
           />
         </Field>
-        <div className="grid gap-1.5">
-          {checks.map((check) => (
-            <span
-              key={check.label}
-              className={`flex items-center gap-2 text-xs font-semibold ${check.ok ? "text-emerald-700" : "text-slate-400"}`}
-            >
-              <Check className="size-3.5" />
-              {check.label}
-            </span>
-          ))}
-        </div>
+        <PasswordPolicyHints password={form.password} />
         <Field label="Xác nhận mật khẩu">
           <Input
             type="password"
@@ -130,7 +131,7 @@ export default function RegisterPage() {
           size="lg"
           className="w-full"
           loading={loading}
-          disabled={!checks.every((check) => check.ok)}
+          disabled={!isPasswordValid}
         >
           Tạo tài khoản
         </Button>

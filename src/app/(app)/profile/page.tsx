@@ -9,6 +9,13 @@ import { Field, Input } from "@/components/ui/field";
 import { StudyDurationField } from "@/components/ui/study-duration-field";
 import { isValidStudyDuration } from "@/lib/study-duration";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
+import { PasswordPolicyHints } from "@/components/auth/password-policy-hints";
+import {
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  validatePasswordPolicy,
+  extractPasswordErrorMessage,
+} from "@/lib/password-policy";
 import type { ProfileResponse } from "@/types/api";
 
 export default function ProfilePage() {
@@ -30,6 +37,9 @@ export default function ProfilePage() {
   });
   const [saving, setSaving] = useState(false);
   const [changing, setChanging] = useState(false);
+
+  const { isValid: isNewPasswordValid } = validatePasswordPolicy(password.newPassword);
+
   async function saveProfile(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -46,8 +56,20 @@ export default function ProfilePage() {
       setSaving(false);
     }
   }
+
   async function changePassword(event: React.FormEvent) {
     event.preventDefault();
+
+    if (!isNewPasswordValid) {
+      show("Mật khẩu mới chưa thỏa mãn chính sách bảo mật.", "error");
+      return;
+    }
+
+    if (password.newPassword !== password.confirmPassword) {
+      show("Mật khẩu xác nhận không khớp.", "error");
+      return;
+    }
+
     setChanging(true);
     try {
       await apiRequest<void>("/api/v1/profile/password", {
@@ -57,11 +79,12 @@ export default function ProfilePage() {
       setPassword({ currentPassword: "", newPassword: "", confirmPassword: "" });
       show("Mật khẩu đã được thay đổi. Các phiên khác đã bị thu hồi.");
     } catch (error) {
-      show(getErrorMessage(error), "error");
+      show(extractPasswordErrorMessage(error, "newPassword") || getErrorMessage(error), "error");
     } finally {
       setChanging(false);
     }
   }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.1fr_.9fr] animate-fade-up">
       <Card className="p-6 sm:p-7">
@@ -143,11 +166,12 @@ export default function ProfilePage() {
                 type="password"
                 value={password.newPassword}
                 onChange={(event) => setPassword({ ...password, newPassword: event.target.value })}
-                minLength={6}
-                maxLength={50}
+                minLength={PASSWORD_MIN_LENGTH}
+                maxLength={PASSWORD_MAX_LENGTH}
                 required
               />
             </Field>
+            <PasswordPolicyHints password={password.newPassword} />
             <Field label="Xác nhận mật khẩu">
               <Input
                 type="password"
@@ -158,7 +182,14 @@ export default function ProfilePage() {
                 required
               />
             </Field>
-            <Button variant="secondary" type="submit" loading={changing}>
+            <Button
+              variant="secondary"
+              type="submit"
+              loading={changing}
+              disabled={
+                !password.currentPassword || !isNewPasswordValid || !password.confirmPassword
+              }
+            >
               Cập nhật mật khẩu
             </Button>
           </form>
