@@ -7,7 +7,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { StudyDurationField } from "@/components/ui/study-duration-field";
+import { TimezonePicker } from "@/components/ui/timezone-picker";
 import { isValidStudyDuration } from "@/lib/study-duration";
+import { getBrowserDetectedTimeZone, isValidIanaTimeZone } from "@/lib/timezones";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import type { ProfileResponse } from "@/types/api";
 
@@ -87,27 +89,30 @@ export default function ProfilePage() {
               required
             />
           </Field>
-          <Field label="Múi giờ">
-            <div className="relative">
-              <Globe2 className="absolute left-3.5 top-3.5 size-4 text-slate-400" />
-              <Input
-                className="pl-10"
-                value={form.timeZone}
-                onChange={(event) => setForm({ ...form, timeZone: event.target.value })}
-                required
-              />
-            </div>
+          <Field
+            label="Múi giờ làm việc & học tập"
+            hint="Chọn múi giờ chuẩn IANA dùng để tính toán ngày học và báo cáo."
+          >
+            <TimezonePicker
+              value={form.timeZone}
+              onChange={(timeZone) => setForm({ ...form, timeZone })}
+              suggestedTimeZone={getBrowserDetectedTimeZone()}
+            />
           </Field>
           <StudyDurationField
             value={form.defaultDailyMinutes}
             onChange={(defaultDailyMinutes) => setForm({ ...form, defaultDailyMinutes })}
-            legend="Thời lượng học mặc định"
-            description="Dùng làm mức dự phòng khi lộ trình hoặc kế hoạch ngày không đặt quỹ thời gian riêng."
+            legend="Thời lượng học mặc định (Tài khoản)"
+            description="Dùng làm mức dự phòng khi lộ trình hoặc kế hoạch ngày không đặt quỹ thời gian riêng. Thay đổi ở đây không làm thay đổi các cam kết lộ trình hiện có."
           />
           <Button
             type="submit"
             loading={saving}
-            disabled={!isValidStudyDuration(form.defaultDailyMinutes)}
+            disabled={
+              !form.displayName.trim() ||
+              !isValidIanaTimeZone(form.timeZone) ||
+              !isValidStudyDuration(form.defaultDailyMinutes)
+            }
           >
             <Save className="size-4" />
             Lưu thay đổi
