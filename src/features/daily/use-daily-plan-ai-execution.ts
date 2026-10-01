@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError, getErrorMessage } from "@/lib/api-client";
+import { aiExecutionPoller } from "@/lib/ai-execution-poller";
+import { useAiExecutionPolling } from "@/lib/use-ai-execution-polling";
 import type { AiExecution } from "@/types/api";
 import {
   belongsToDailyPlan,
@@ -14,9 +16,6 @@ import {
   readRememberedDailyPlanAiExecution,
   rememberDailyPlanAiExecution,
 } from "./daily-plan-ai-execution-api";
-
-const POLL_INTERVAL_MS = 2_000;
-const MAX_POLL_INTERVAL_MS = 30_000;
 
 type SuccessfulExecutionHandler = (
   resultId: string,
@@ -32,10 +31,10 @@ export function useDailyPlanAiExecution(
   dailyPlanId: string,
   onSucceeded: SuccessfulExecutionHandler,
 ) {
-  const [execution, setExecution] = useState<AiExecution | null>(null);
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [pollingError, setPollingError] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
   const [refreshToken, setRefreshToken] = useState(0);
   const submissionIntentRef = useRef<SubmissionIntent | null>(null);
   const handledExecutionsRef = useRef(new Set<string>());
@@ -45,18 +44,35 @@ export function useDailyPlanAiExecution(
     onSucceededRef.current = onSucceeded;
   }, [onSucceeded]);
 
+  const {
+    execution: polledExecution,
+    error: polledError,
+    refreshStatus: refreshPolledStatus,
+  } = useAiExecutionPolling(activeExecutionId);
+
+  const belongs = polledExecution ? belongsToDailyPlan(polledExecution, dailyPlanId) : true;
+  const execution = belongs ? polledExecution : null;
+
+  const pollingError = !belongs
+    ? "Tiến trình AI không thuộc kế hoạch ngày này."
+    : polledError
+      ? getErrorMessage(polledError)
+      : recoveryError;
+
   const acceptExecution = useCallback(
     (nextExecution: AiExecution) => {
       if (!belongsToDailyPlan(nextExecution, dailyPlanId)) {
         throw new Error("Backend trả về tiến trình AI của một kế hoạch ngày khác.");
       }
       rememberDailyPlanAiExecution(dailyPlanId, nextExecution.id);
-      setExecution(nextExecution);
-      setPollingError("");
+      aiExecutionPoller.seedExecution(nextExecution);
+      setActiveExecutionId(nextExecution.id);
+      setRecoveryError("");
     },
     [dailyPlanId],
   );
 
+  // AC6: Reload recovery from Backend
   useEffect(() => {
     let cancelled = false;
 
@@ -64,24 +80,48 @@ export function useDailyPlanAiExecution(
       setRecovering(true);
       const rememberedId = readRememberedDailyPlanAiExecution(dailyPlanId);
       try {
-        const recovered = rememberedId
-          ? await getAiExecution(rememberedId)
-          : await getLatestDailyPlanAiExecution(dailyPlanId);
-        if (cancelled) return;
+        let recovered: AiExecution | null = null;
+        if (rememberedId) {
+          try {
+            recovered = await getAiExecution(rememberedId);
+          } catch (error) {
+            if (error instanceof ApiClientError && error.details.status === 404) {
+              clearRememberedDailyPlanAiExecution(dailyPlanId, rememberedId);
+              try {
+                recovered = await getLatestDailyPlanAiExecution(dailyPlanId);
+              } catch (targetError) {
+                if (targetError instanceof ApiClientError && targetError.details.status === 404) {
+                  setRecoveryError("Không thể khôi phục tiến trình.");
+                } else {
+                  throw targetError;
+                }
+              }
+            } else {
+              throw error;
+            }
+          }
+        } else {
+          try {
+            recovered = await getLatestDailyPlanAiExecution(dailyPlanId);
+          } catch (targetError) {
+            if (!(targetError instanceof ApiClientError && targetError.details.status === 404)) {
+              throw targetError;
+            }
+          }
+        }
 
-        if (!belongsToDailyPlan(recovered, dailyPlanId)) {
-          clearRememberedDailyPlanAiExecution(dailyPlanId, rememberedId ?? undefined);
-          setPollingError("Tiến trình AI không thuộc kế hoạch ngày này.");
-        } else if (rememberedId || isActiveAiExecution(recovered)) {
-          acceptExecution(recovered);
+        if (cancelled) return;
+        if (recovered) {
+          if (!belongsToDailyPlan(recovered, dailyPlanId)) {
+            clearRememberedDailyPlanAiExecution(dailyPlanId, rememberedId ?? undefined);
+            setRecoveryError("Tiến trình AI không thuộc kế hoạch ngày này.");
+          } else if (rememberedId || isActiveAiExecution(recovered)) {
+            acceptExecution(recovered);
+          }
         }
       } catch (error) {
         if (cancelled) return;
-        if (error instanceof ApiClientError && error.details.status === 404) {
-          clearRememberedDailyPlanAiExecution(dailyPlanId, rememberedId ?? undefined);
-        } else {
-          setPollingError(getErrorMessage(error));
-        }
+        setRecoveryError(getErrorMessage(error));
       } finally {
         if (!cancelled) setRecovering(false);
       }
@@ -92,72 +132,6 @@ export function useDailyPlanAiExecution(
       cancelled = true;
     };
   }, [acceptExecution, dailyPlanId, refreshToken]);
-
-  const activeExecutionId = execution && isActiveAiExecution(execution) ? execution.id : null;
-
-  useEffect(() => {
-    if (!activeExecutionId) return;
-    const executionId = activeExecutionId;
-
-    let cancelled = false;
-    let requestInFlight = false;
-    let timeoutId: number | undefined;
-    let consecutiveFailures = 0;
-
-    function clearPoll() {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      timeoutId = undefined;
-    }
-
-    function schedule(delay: number) {
-      clearPoll();
-      if (cancelled || document.visibilityState === "hidden") return;
-      timeoutId = window.setTimeout(() => void poll(), delay);
-    }
-
-    async function poll() {
-      if (cancelled || requestInFlight || document.visibilityState === "hidden") return;
-      requestInFlight = true;
-      try {
-        const nextExecution = await getAiExecution(executionId);
-        if (cancelled) return;
-        if (!belongsToDailyPlan(nextExecution, dailyPlanId)) {
-          clearRememberedDailyPlanAiExecution(dailyPlanId, executionId);
-          setExecution(null);
-          setPollingError("Tiến trình AI không thuộc kế hoạch ngày này.");
-          return;
-        }
-        setExecution(nextExecution);
-        setPollingError("");
-        consecutiveFailures = 0;
-        if (isActiveAiExecution(nextExecution)) schedule(POLL_INTERVAL_MS);
-      } catch (error) {
-        if (cancelled) return;
-        consecutiveFailures += 1;
-        setPollingError(getErrorMessage(error));
-        schedule(Math.min(POLL_INTERVAL_MS * 2 ** (consecutiveFailures - 1), MAX_POLL_INTERVAL_MS));
-      } finally {
-        requestInFlight = false;
-      }
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === "hidden") {
-        clearPoll();
-      } else {
-        consecutiveFailures = 0;
-        void poll();
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    schedule(POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearPoll();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [activeExecutionId, dailyPlanId]);
 
   useEffect(() => {
     if (!execution || isActiveAiExecution(execution)) return;
@@ -170,15 +144,15 @@ export function useDailyPlanAiExecution(
     if (execution.status === "FAILED") return;
     if (!execution.resultId || execution.resultType !== "DAILY_PLAN_VERSION") {
       window.setTimeout(
-        () => setPollingError("AI đã hoàn tất nhưng không trả về phiên bản kế hoạch ngày."),
+        () => setRecoveryError("AI đã hoàn tất nhưng không trả về phiên bản kế hoạch ngày."),
         0,
       );
       return;
     }
 
     void Promise.resolve(onSucceededRef.current(execution.resultId, execution))
-      .then(() => setExecution(null))
-      .catch((error) => setPollingError(getErrorMessage(error)));
+      .then(() => setActiveExecutionId(null))
+      .catch((error) => setRecoveryError(getErrorMessage(error)));
   }, [dailyPlanId, execution]);
 
   const submit = useCallback(
@@ -190,7 +164,7 @@ export function useDailyPlanAiExecution(
           : crypto.randomUUID();
       submissionIntentRef.current = { operation, idempotencyKey };
       setSubmitting(true);
-      setPollingError("");
+      setRecoveryError("");
       try {
         const accepted =
           operation === "GENERATE"
@@ -209,12 +183,12 @@ export function useDailyPlanAiExecution(
   );
 
   const dismissFailure = useCallback(() => {
-    if (execution) {
-      clearRememberedDailyPlanAiExecution(dailyPlanId, execution.id);
+    if (activeExecutionId) {
+      clearRememberedDailyPlanAiExecution(dailyPlanId, activeExecutionId);
+      setActiveExecutionId(null);
     }
-    setExecution(null);
-    setPollingError("");
-  }, [dailyPlanId, execution]);
+    setRecoveryError("");
+  }, [activeExecutionId, dailyPlanId]);
 
   return {
     execution,
@@ -225,7 +199,11 @@ export function useDailyPlanAiExecution(
     generate: () => submit("GENERATE"),
     regenerate: () => submit("REGENERATE"),
     refreshStatus: () => {
-      setPollingError("");
+      setRecoveryError("");
+      if (activeExecutionId) {
+        refreshPolledStatus();
+        return;
+      }
       setRefreshToken((current) => current + 1);
     },
     dismissFailure,

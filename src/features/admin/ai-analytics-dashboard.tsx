@@ -5,7 +5,6 @@ import {
   Activity,
   AlertCircle,
   AlertTriangle,
-  ArrowDownUp,
   BarChart3,
   Calendar,
   CheckCircle2,
@@ -15,7 +14,6 @@ import {
   Layers,
   RefreshCw,
   ShieldCheck,
-  Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,7 +49,9 @@ export function AiAnalyticsDashboard() {
       }
       if (selectedPreset === "custom") {
         return {
-          from: customFrom ? new Date(customFrom).toISOString() : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          from: customFrom
+            ? new Date(customFrom).toISOString()
+            : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
           to: customTo ? new Date(customTo).toISOString() : toIso,
         };
       }
@@ -59,7 +59,7 @@ export function AiAnalyticsDashboard() {
       const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       return { from: from.toISOString(), to: toIso };
     },
-    [customFrom, customTo]
+    [customFrom, customTo],
   );
 
   const fetchMetrics = useCallback(
@@ -78,12 +78,33 @@ export function AiAnalyticsDashboard() {
         setIsLoading(false);
       }
     },
-    [calculateDates, preset, show]
+    [calculateDates, preset, show],
   );
 
   useEffect(() => {
-    void fetchMetrics(preset);
-  }, [fetchMetrics, preset]);
+    let cancelled = false;
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { from, to } = calculateDates(preset);
+        const response = await aiAnalyticsApi.getMetrics(from, to);
+        if (!cancelled) setData(response || []);
+      } catch (err) {
+        if (!cancelled) {
+          const msg = getErrorMessage(err);
+          setError(msg);
+          show(msg, "error");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [calculateDates, preset, show]);
 
   // Summary aggregation
   const summary = useMemo(() => {
@@ -241,7 +262,9 @@ export function AiAnalyticsDashboard() {
       <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200/80 bg-emerald-50/70 px-4 py-2.5 text-xs text-emerald-900 shadow-xs">
         <ShieldCheck className="size-4 shrink-0 text-emerald-600" />
         <span>
-          <strong>Enterprise Privacy Guard:</strong> Hệ thống chỉ tổng hợp metadata (độ trễ, token, số lần gọi). Nội dung Prompt, Response body của người dùng tuyệt đối <strong>không</strong> được ghi nhận hay phân tích.
+          <strong>Enterprise Privacy Guard:</strong> Hệ thống chỉ tổng hợp metadata (độ trễ, token,
+          số lần gọi). Nội dung Prompt, Response body của người dùng tuyệt đối{" "}
+          <strong>không</strong> được ghi nhận hay phân tích.
         </span>
       </div>
 
@@ -411,9 +434,7 @@ export function AiAnalyticsDashboard() {
                             <p className="font-bold text-slate-900">
                               {row.providerDisplayName || "Unknown"}
                             </p>
-                            <p className="text-[11px] font-mono text-slate-500">
-                              {row.model}
-                            </p>
+                            <p className="text-[11px] font-mono text-slate-500">{row.model}</p>
                           </div>
                         </div>
                       </td>
@@ -491,9 +512,7 @@ export function AiAnalyticsDashboard() {
 
                       {/* Input Tokens */}
                       <td className="px-6 py-4 text-right font-mono text-slate-600">
-                        {row.totalInputTokens != null
-                          ? row.totalInputTokens.toLocaleString()
-                          : "—"}
+                        {row.totalInputTokens != null ? row.totalInputTokens.toLocaleString() : "—"}
                       </td>
 
                       {/* Output Tokens */}
@@ -505,9 +524,7 @@ export function AiAnalyticsDashboard() {
 
                       {/* Total Tokens */}
                       <td className="px-6 py-4 text-right font-mono font-bold text-slate-900">
-                        {row.totalTokens != null
-                          ? row.totalTokens.toLocaleString()
-                          : "—"}
+                        {row.totalTokens != null ? row.totalTokens.toLocaleString() : "—"}
                       </td>
                     </tr>
                   );

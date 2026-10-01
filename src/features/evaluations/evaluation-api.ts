@@ -33,8 +33,13 @@ export async function getLatestDailyQuizExecution(dailyPlanId: string): Promise<
   return apiRequest<AiExecution>(`/api/v1/daily-plans/${dailyPlanId}/quiz/ai-executions/current`);
 }
 
-export async function getAiExecution(executionId: string): Promise<AiExecution> {
-  return apiRequest<AiExecution>(`/api/v1/ai-executions/${executionId}`);
+export async function getAiExecution(
+  executionId: string,
+  options?: { signal?: AbortSignal },
+): Promise<AiExecution> {
+  return apiRequest<AiExecution>(`/api/v1/ai-executions/${executionId}`, {
+    signal: options?.signal,
+  });
 }
 
 export async function submitDailyQuiz(
