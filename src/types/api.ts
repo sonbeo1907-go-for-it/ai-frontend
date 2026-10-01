@@ -219,6 +219,7 @@ export interface Material {
   errorMessage?: string;
   createdAt: string;
   updatedAt?: string;
+  archivedAt?: string;
 }
 export interface PageResponse<T> {
   content: T[];
