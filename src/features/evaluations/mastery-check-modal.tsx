@@ -7,6 +7,8 @@ import { Modal } from "@/components/ui/modal";
 import { ApiClientError, getErrorMessage } from "@/lib/api-client";
 import { aiExecutionPoller } from "@/lib/ai-execution-poller";
 import { useAiExecutionPolling } from "@/lib/use-ai-execution-polling";
+import { AiErrorAlert } from "@/components/ui/ai-error-alert";
+import { AiNetworkAlert } from "@/components/ui/ai-network-alert";
 import type { AiExecution, MasteryCheckResult, QuizDetail, WeakTopic } from "@/types/api";
 import {
   getLatestMasteryCheckExecution,
@@ -116,16 +118,15 @@ export function MasteryCheckModal({ topic, onClose, onUpdated }: MasteryCheckMod
     }
   }, [activeExecutionId, loadQuiz, polledExecution, weakTopicId]);
 
-  const displayError =
+  const isAiFailed =
+    currentExecution?.status === "FAILED" || currentExecution?.status === "TIMEOUT";
+
+  const isOutputInvalid =
     polledExecution?.status === "SUCCEEDED" &&
-    (polledExecution.resultType !== "QUIZ" || !polledExecution.resultId)
-      ? "AI hoàn tất nhưng không trả về bài kiểm tra hợp lệ."
-      : polledError
-        ? getErrorMessage(polledError)
-        : error;
+    (polledExecution.resultType !== "QUIZ" || !polledExecution.resultId);
 
   async function generate() {
-    if (!weakTopicId || submitting || isRunning(execution)) return;
+    if (!weakTopicId || submitting || isRunning(currentExecution)) return;
     setSubmitting(true);
     setError("");
     try {
@@ -264,20 +265,38 @@ export function MasteryCheckModal({ topic, onClose, onUpdated }: MasteryCheckMod
         ) : (
           <div className="space-y-4 py-8 text-center">
             <p className="text-sm text-slate-600">
-              {currentExecution?.status === "FAILED"
-                ? "AI chưa thể tạo bài kiểm tra. Chủ đề này vẫn cần được củng cố."
+              {isAiFailed
+                ? "Chủ đề này vẫn cần được củng cố. Bạn có thể xem chi tiết lỗi và thử lại bên dưới."
                 : "Tạo bài kiểm tra dành riêng cho đơn vị học này."}
             </p>
-            {topic.status !== "MASTERED" && (
+            {!isAiFailed && topic.status !== "MASTERED" && (
               <Button onClick={() => void generate()} loading={submitting}>
-                {currentExecution?.status === "FAILED" ? "Thử lại" : "Tạo bài kiểm tra"}
+                Tạo bài kiểm tra
               </Button>
             )}
           </div>
         )}
-        {(displayError || currentExecution?.failureMessage) && (
+        {polledError && !isAiFailed && (
+          <AiNetworkAlert
+            message={getErrorMessage(polledError)}
+            onRefresh={() => {
+              if (activeExecutionId) {
+                aiExecutionPoller.refresh(activeExecutionId);
+              }
+            }}
+          />
+        )}
+        {(isAiFailed || isOutputInvalid) && (
+          <AiErrorAlert
+            execution={currentExecution}
+            failureCode={isOutputInvalid ? "AI_OUTPUT_INVALID" : currentExecution?.failureCode}
+            onRetry={topic.status !== "MASTERED" ? () => void generate() : undefined}
+            isRetrying={submitting}
+          />
+        )}
+        {error && (
           <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
-            {displayError || currentExecution?.failureMessage}
+            {error}
           </p>
         )}
         {history.length > 0 && !isRunning(currentExecution) && (

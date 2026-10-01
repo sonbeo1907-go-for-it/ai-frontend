@@ -544,6 +544,12 @@ export function DailyPlanDetailView() {
         pollingError={aiPollingError}
         onRefresh={refreshAiStatus}
         onDismiss={dismissAiFailure}
+        onRetry={
+          aiExecution?.operation === "REGENERATE"
+            ? () => void regenerateWithAi()
+            : () => void generateWithAi()
+        }
+        isRetrying={aiSubmitting}
       />
       <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">
         <Card className="h-fit p-4">

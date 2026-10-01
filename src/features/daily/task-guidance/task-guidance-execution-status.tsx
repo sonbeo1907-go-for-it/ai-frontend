@@ -1,7 +1,8 @@
 import { AlertCircle, Clock3, LoaderCircle, RefreshCw, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AiErrorAlert } from "@/components/ui/ai-error-alert";
 import type { AiExecution } from "@/types/api";
-import { getTaskGuidanceFailureMessage } from "./task-guidance-errors";
+
 
 export function TaskGuidanceExecutionStatus({
   execution,
@@ -9,12 +10,16 @@ export function TaskGuidanceExecutionStatus({
   pollingError,
   onRefresh,
   onDismiss,
+  onRetry,
+  isRetrying = false,
 }: {
   execution: AiExecution | null;
   recovering: boolean;
   pollingError: string;
   onRefresh: () => void;
   onDismiss: () => void;
+  onRetry?: () => void;
+  isRetrying?: boolean;
 }) {
   if (!execution && !recovering && !pollingError) return null;
 
@@ -30,17 +35,43 @@ export function TaskGuidanceExecutionStatus({
           <span>{recovering ? "Đang kiểm tra tiến trình AI…" : pollingError}</span>
         </div>
         {!recovering && (
-          <Button type="button" variant="ghost" size="sm" onClick={onRefresh}>
-            <RefreshCw className="size-4" />
-            Kiểm tra lại
+          <Button type="button" variant="ghost" size="sm" onClick={onRetry ?? onRefresh} disabled={isRetrying}>
+            <RefreshCw className={`size-4 ${isRetrying ? "animate-spin" : ""}`} />
+            Thử lại
           </Button>
         )}
       </div>
     );
   }
 
-  const failed = execution.status === "FAILED";
+  const failed = execution.status === "FAILED" || execution.status === "TIMEOUT";
   const queued = execution.status === "QUEUED";
+
+  if (failed) {
+    return (
+      <div className="relative">
+        <AiErrorAlert
+          execution={execution}
+          failureCode={execution.failureCode}
+          onRetry={onRetry ?? onRefresh}
+          retryLabel="Thử lại"
+          isRetrying={isRetrying}
+          onManualFallback={onDismiss}
+          manualFallbackLabel="Tự soạn checklist thủ công"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onDismiss}
+          className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
+          title="Đóng thông báo"
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -75,10 +106,8 @@ export function TaskGuidanceExecutionStatus({
               </Button>
             )}
           </div>
-          <p className={`mt-1 text-sm leading-6 ${failed ? "text-rose-700" : "text-slate-600"}`}>
-            {failed
-              ? getTaskGuidanceFailureMessage(execution.failureCode)
-              : "Bạn có thể đóng cửa sổ; quá trình vẫn tiếp tục trên máy chủ."}
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Bạn có thể đóng cửa sổ; quá trình vẫn tiếp tục trên máy chủ.
           </p>
           {!failed && (
             <div className="mt-3 flex items-center gap-2 text-xs font-bold text-indigo-700">
