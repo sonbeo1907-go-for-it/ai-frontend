@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/states";
 import { Select } from "@/components/ui/field";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
-import { formatDateOnly } from "@/lib/format";
+import { formatDateOnly, todayIso } from "@/lib/format";
 import { useAuth } from "@/features/auth/auth-context";
 import { fetchDashboardReport } from "@/features/reports/report-api";
 import { DashboardStatsSection } from "@/features/reports/dashboard-stats-card";
@@ -140,6 +140,10 @@ export default function DashboardPage() {
   const activeRoadmaps = roadmaps.data?.active ?? 0;
   const recentPlans = plans.data?.content ?? [];
   const name = profile?.profile?.displayName?.split(" ").at(-1) ?? "bạn";
+  const userTimeZone = profile?.profile?.timeZone || "Asia/Ho_Chi_Minh";
+  const todayDateString = todayIso(userTimeZone);
+  const todayPlan = recentPlans.find((p) => p.planDate === todayDateString);
+
   return (
     <div className="space-y-7 animate-fade-up">
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-7 text-white shadow-lg shadow-slate-200 sm:p-9">
@@ -150,20 +154,36 @@ export default function DashboardPage() {
             Hôm nay bạn muốn tiến thêm một bước ở đâu?
           </h2>
           <p className="mt-3 max-w-xl text-sm leading-6 text-indigo-100">
-            Chọn một lộ trình đang học hoặc tạo kế hoạch ngày mới. Mọi thay đổi đều nằm trong quyền
+            Chọn một lộ trình đang học hoặc tiếp tục nhiệm vụ học của ngày hôm nay. Mọi thay đổi đều nằm trong quyền
             kiểm soát của bạn.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
+            {todayPlan ? (
+              <Link
+                href={`/daily-plans/${todayPlan.id}`}
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-black text-white shadow-md hover:bg-emerald-600 transition"
+              >
+                <CalendarCheck2 className="size-4" />
+                Vào học ngay hôm nay
+              </Link>
+            ) : (
+              <Link
+                href="/daily-plans/today"
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-5 text-sm font-extrabold text-slate-900 shadow-sm hover:bg-slate-100 transition"
+              >
+                <CalendarCheck2 className="size-4 text-indigo-600" />
+                Bắt đầu học hôm nay
+              </Link>
+            )}
             <Link
               href="/daily-plans"
-              className="inline-flex h-11 items-center gap-2 rounded-lg bg-white px-4 text-sm font-extrabold text-slate-900 shadow-sm hover:bg-slate-100"
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 text-sm font-bold text-white backdrop-blur hover:bg-white/15 transition"
             >
-              <CalendarCheck2 className="size-4" />
-              Mở kế hoạch ngày
+              Lịch sử kế hoạch
             </Link>
             <Link
               href="/onboarding/roadmap"
-              className="inline-flex h-11 items-center gap-2 rounded-lg border border-white/25 bg-white/10 px-4 text-sm font-bold text-white backdrop-blur hover:bg-white/15"
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-4 text-sm font-bold text-white backdrop-blur hover:bg-white/15 transition"
             >
               <Plus className="size-4" />
               Lộ trình mới
@@ -265,9 +285,16 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-sm font-extrabold text-slate-900">
-                        {formatDateOnly(plan.planDate)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-extrabold text-slate-900">
+                          {formatDateOnly(plan.planDate)}
+                        </p>
+                        {plan.planDate === todayDateString && (
+                          <Badge tone="emerald" className="text-[10px] font-bold">
+                            Hôm nay
+                          </Badge>
+                        )}
+                      </div>
                       <p className="mt-1 text-xs text-slate-500">
                         {plan.completedItemsCount}/{plan.totalItemsCount} nhiệm vụ ·{" "}
                         {plan.totalPlannedMinutes} phút
@@ -311,10 +338,10 @@ export default function DashboardPage() {
               detail="PDF, DOCX, TXT hoặc văn bản"
             />
             <QuickLink
-              href="/daily-plans"
+              href="/daily-plans/today"
               icon={Clock3}
-              title="Lên kế hoạch hôm nay"
-              detail="Checklist và Pomodoro 25 phút"
+              title="Kế hoạch hôm nay"
+              detail="Checklist nhiệm vụ và làm bài đánh giá"
             />
           </div>
         </Card>

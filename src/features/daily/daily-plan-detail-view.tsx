@@ -1,16 +1,22 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  CalendarCheck2,
   CheckCircle2,
+  ChevronDown,
+  Clock3,
   CopyPlus,
-  Info,
   History,
+  Info,
   ListChecks,
+  MoreVertical,
+  Play,
   Plus,
   Sparkles,
+  Target,
   Timer,
   Trash2,
 } from "lucide-react";
@@ -22,8 +28,10 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { StudyDurationField } from "@/components/ui/study-duration-field";
 import { PageLoading, ProgressBar } from "@/components/ui/states";
+import { useAuth } from "@/features/auth/auth-context";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
-import { formatDateOnly } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { formatDateOnly, todayIso } from "@/lib/format";
 import { dailyPlanStatusLabels, versionStatusLabels } from "@/lib/display-labels";
 import { isValidStudyDuration } from "@/lib/study-duration";
 import type {
@@ -49,9 +57,20 @@ import { DailyPlanProgressHistoryModal, ProgressHistoryModal } from "./progress-
 import { DailyPlanTaskCard } from "./daily-plan-task-card";
 import { TaskStepDialog } from "./task-steps/task-step-dialog";
 
+interface PrimaryActionConfig {
+  label: string;
+  icon: typeof CheckCircle2;
+  onClick: () => void;
+  variant: "primary" | "secondary" | "success";
+  disabled?: boolean;
+  loading?: boolean;
+  tooltip?: string;
+}
+
 export function DailyPlanDetailView() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { profile } = useAuth();
   const { show } = useToast();
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [versions, setVersions] = useState<DailyPlanVersion[]>([]);
@@ -132,6 +151,10 @@ export function DailyPlanDetailView() {
     () => versions.find((item) => item.id === selectedId) ?? null,
     [versions, selectedId],
   );
+  const activeVersion = useMemo(
+    () => versions.find((item) => item.status === "ACTIVE") ?? null,
+    [versions],
+  );
   const stepTarget = useMemo(
     () => version?.items.find((item) => item.id === stepTargetId) ?? null,
     [stepTargetId, version],
@@ -163,6 +186,16 @@ export function DailyPlanDetailView() {
     0,
   );
   const completion = items.length ? Math.round((earned / items.length) * 10) / 10 : 0;
+
+  // Next actionable task in the selected version (AC3)
+  const nextTask = useMemo(() => {
+    if (!items.length) return null;
+    const inProgress = items.find((i) => i.status === "IN_PROGRESS");
+    if (inProgress) return inProgress;
+    return (
+      items.find((i) => i.status === "NOT_STARTED" || i.status === "PARTIALLY_COMPLETED") ?? null
+    );
+  }, [items]);
 
   const updateTaskSteps = useCallback((versionId: string, response: DailyPlanTaskStepsResponse) => {
     setVersions((current) =>
@@ -386,6 +419,173 @@ export function DailyPlanDetailView() {
     },
     [id, load, show],
   );
+
+  // AC1: Exactly one primary action determined by state
+  const primaryAction = useMemo<PrimaryActionConfig | null>(() => {
+    if (!version) return null;
+
+    // 1. DRAFT version
+    if (draftVersionSelected) {
+      if (items.length === 0) {
+        return {
+          label: "Thêm nhiệm vụ",
+          icon: Plus,
+          onClick: () => {
+            void openAddTask();
+          },
+          variant: "primary",
+          disabled: false,
+          tooltip: "Thêm nhiệm vụ đầu tiên vào bản DRAFT",
+        };
+      }
+      return {
+        label: "Kích hoạt kế hoạch",
+        icon: CheckCircle2,
+        onClick: () => {
+          void handleActivate();
+        },
+        variant: "success",
+        loading: busy,
+        disabled: items.length === 0,
+        tooltip: "Kích hoạt phiên bản này để bắt đầu học",
+      };
+    }
+
+    // 2. ACTIVE version
+    if (version.status === "ACTIVE") {
+      if (plan?.status === "READY") {
+        if (nextTask) {
+          return {
+            label: "Bắt đầu học",
+            icon: Play,
+            onClick: () => {
+              setPomodoro({ open: true, taskId: nextTask.id });
+            },
+            variant: "success",
+            tooltip: `Bắt đầu học nhiệm vụ: ${nextTask.title}`,
+          };
+        }
+        return {
+          label: "Tạo bản chỉnh sửa",
+          icon: CopyPlus,
+          onClick: () => {
+            void createDraft();
+          },
+          variant: "primary",
+          loading: busy,
+          tooltip: "Tạo bản DRAFT mới để thêm nhiệm vụ",
+        };
+      }
+
+      if (plan?.status === "IN_PROGRESS") {
+        if (nextTask) {
+          return {
+            label: nextTask.status === "IN_PROGRESS" ? "Tiếp tục học" : "Bắt đầu nhiệm vụ",
+            icon: Timer,
+            onClick: () => {
+              setPomodoro({ open: true, taskId: nextTask.id });
+            },
+            variant: "primary",
+            tooltip: `Học nhiệm vụ tiếp theo: ${nextTask.title}`,
+          };
+        }
+        if (evaluation?.quizScore == null) {
+          return {
+            label: "Làm Micro-Quiz cuối ngày",
+            icon: Sparkles,
+            onClick: () => {
+              setQuizModalOpen(true);
+            },
+            variant: "primary",
+            tooltip: "Làm bài kiểm tra đánh giá kiến thức cuối ngày",
+          };
+        }
+        return {
+          label: `Xem lại Quiz (${evaluation.quizScore}%)`,
+          icon: Sparkles,
+          onClick: () => {
+            setQuizModalOpen(true);
+          },
+          variant: "secondary",
+          tooltip: "Xem lại kết quả Micro-Quiz đã hoàn thành",
+        };
+      }
+
+      if (plan?.status === "COMPLETED") {
+        if (evaluation?.quizScore == null) {
+          return {
+            label: "Làm Micro-Quiz cuối ngày",
+            icon: Sparkles,
+            onClick: () => {
+              setQuizModalOpen(true);
+            },
+            variant: "primary",
+            tooltip: "Làm bài kiểm tra đánh giá",
+          };
+        }
+        return {
+          label: `Xem lại Quiz (${evaluation.quizScore}%)`,
+          icon: Sparkles,
+          onClick: () => {
+            setQuizModalOpen(true);
+          },
+          variant: "secondary",
+          tooltip: "Xem lại kết quả Micro-Quiz",
+        };
+      }
+    }
+
+    // 3. SUPERSEDED version
+    if (version.status === "SUPERSEDED") {
+      if (activeVersion) {
+        return {
+          label: "Về bản ACTIVE hiện tại",
+          icon: CheckCircle2,
+          onClick: () => {
+            setStepTargetId(null);
+            setSelectedId(activeVersion.id);
+          },
+          variant: "primary",
+          tooltip: "Quay lại phiên bản đang hoạt động",
+        };
+      }
+      return {
+        label: "Tạo bản chỉnh sửa",
+        icon: CopyPlus,
+        onClick: () => {
+          void createDraft();
+        },
+        variant: "primary",
+        loading: busy,
+        tooltip: "Tạo phiên bản DRAFT mới từ bản này",
+      };
+    }
+
+    // Fallback default
+    if (executable && nextTask) {
+      return {
+        label: "Tiếp tục học",
+        icon: Timer,
+        onClick: () => {
+          setPomodoro({ open: true, taskId: nextTask.id });
+        },
+        variant: "primary",
+        tooltip: "Tiếp tục việc học",
+      };
+    }
+
+    return null;
+  }, [
+    version,
+    draftVersionSelected,
+    items.length,
+    plan?.status,
+    nextTask,
+    evaluation?.quizScore,
+    busy,
+    activeVersion,
+    executable,
+  ]);
   if (loading && !plan) return <PageLoading label="Đang mở kế hoạch ngày…" />;
   if (!plan)
     return (
@@ -393,21 +593,40 @@ export function DailyPlanDetailView() {
         Không thể tải kế hoạch.
       </div>
     );
+  const userTimeZone = profile?.profile?.timeZone || plan.timeZoneSnapshot || "Asia/Ho_Chi_Minh";
+  const todayDateString = todayIso(userTimeZone);
+  const isToday = plan.planDate === todayDateString;
+
   return (
     <div className="space-y-6 animate-fade-up">
-      <button
-        onClick={() => router.push("/daily-plans")}
-        className="focus-ring inline-flex items-center gap-2 rounded-lg text-sm font-bold text-slate-500 hover:text-indigo-700"
-      >
-        <ArrowLeft className="size-4" />
-        Lịch sử kế hoạch
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => router.push("/daily-plans")}
+          className="focus-ring inline-flex items-center gap-2 rounded-lg text-sm font-bold text-slate-500 hover:text-indigo-700"
+        >
+          <ArrowLeft className="size-4" />
+          Lịch sử kế hoạch
+        </button>
+
+        {!isToday && (
+          <button
+            onClick={() => router.push("/daily-plans/today")}
+            className="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition shadow-xs"
+            title="Quay về công việc học của ngày hôm nay"
+          >
+            <CalendarCheck2 className="size-3.5 text-indigo-600" />
+            Về kế hoạch hôm nay
+          </button>
+        )}
+      </div>
+
+      {/* Header Card: Date, Status, and AC1/AC2 Toolbar */}
       <Card className="overflow-hidden">
         <div className="h-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
-        <div className="p-6 sm:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="p-6 sm:p-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   tone={
                     plan.status === "IN_PROGRESS"
@@ -419,9 +638,22 @@ export function DailyPlanDetailView() {
                 >
                   {dailyPlanStatusLabels[plan.status]}
                 </Badge>
+                {version && (
+                  <Badge
+                    tone={
+                      version.status === "ACTIVE"
+                        ? "emerald"
+                        : version.status === "DRAFT"
+                          ? "indigo"
+                          : "slate"
+                    }
+                  >
+                    Version {version.versionNumber} ({versionStatusLabels[version.status]})
+                  </Badge>
+                )}
                 <Badge>{plan.timeZoneSnapshot}</Badge>
               </div>
-              <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl">
+              <h2 className="mt-2.5 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
                 {formatDateOnly(plan.planDate, {
                   weekday: "long",
                   day: "2-digit",
@@ -429,157 +661,142 @@ export function DailyPlanDetailView() {
                   year: "numeric",
                 })}
               </h2>
-              <p className="mt-2 text-sm text-slate-500">
-                Quỹ thời gian {version?.availableMinutes ?? plan.availableMinutes} phút · tổng dự
-                kiến {version?.totalPlannedMinutes ?? 0} phút
+              <p className="mt-1.5 text-xs font-medium text-slate-500 sm:text-sm">
+                Quỹ thời gian {version?.availableMinutes ?? plan.availableMinutes} phút · Dự kiến{" "}
+                {version?.totalPlannedMinutes ?? 0} phút · Đã hoàn thành{" "}
+                {items.filter((i) => i.status === "COMPLETED").length}/{items.length} nhiệm vụ ({completion}%)
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => void handleGenerateAiDraft()}
-                loading={aiSubmitting || aiRecovering}
-                disabled={!canGenerateAi}
-                className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:from-indigo-600 hover:to-purple-600 border-none shadow-[0_0_15px_rgba(99,102,241,0.5)]"
-              >
-                <Sparkles className="size-4" />
-                {aiActive
-                  ? "AI đang xử lý..."
-                  : aiSubmitting || aiRecovering
-                    ? "Đang gửi yêu cầu..."
-                    : currentDraft
-                      ? "Sinh lại kế hoạch AI"
-                      : "Sinh kế hoạch AI"}
-              </Button>
-              {editable && (
-                <Button variant="secondary" onClick={openBudgetEditor}>
-                  <Timer className="size-4" />
-                  Chỉnh quỹ thời gian
-                </Button>
-              )}
-              {editable && (
-                <Button variant="secondary" onClick={() => void openAddTask()}>
+
+            {/* Toolbar - AC1: Exactly one primary action highlighted + AC2: Progressive disclosure */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Secondary quick action when in DRAFT: Add Task */}
+              {editable && items.length > 0 && (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => void openAddTask()}
+                  className="shadow-xs"
+                >
                   <Plus className="size-4" />
-                  Thêm nhiệm vụ
+                  <span className="hidden sm:inline">Thêm nhiệm vụ</span>
                 </Button>
               )}
-              <Button variant="secondary" onClick={() => void openPlanProgressHistory()}>
-                <History className="size-4" />
-                Lịch sử tiến độ
-              </Button>
-              {editable && (
+
+              {/* Single Primary Action Button (AC1) */}
+              {primaryAction && (
                 <Button
-                  variant="success"
-                  onClick={() => void handleActivate()}
-                  loading={busy}
-                  disabled={items.length === 0}
+                  variant={primaryAction.variant}
+                  size="md"
+                  onClick={primaryAction.onClick}
+                  loading={primaryAction.loading}
+                  disabled={primaryAction.disabled}
+                  className={cn(
+                    "shadow-sm font-black text-xs sm:text-sm",
+                    primaryAction.variant === "success" &&
+                      "bg-emerald-600 hover:bg-emerald-700 text-white",
+                    primaryAction.variant === "primary" &&
+                      "bg-indigo-600 hover:bg-indigo-700 text-white",
+                  )}
+                  title={primaryAction.tooltip}
                 >
-                  <CheckCircle2 className="size-4" />
-                  Kích hoạt
+                  <primaryAction.icon className="size-4" />
+                  {primaryAction.label}
                 </Button>
               )}
-              {!draftVersionSelected && !aiBlockingMutations && (
-                <Button onClick={() => void createDraft()} loading={busy}>
-                  <CopyPlus className="size-4" />
-                  Tạo bản chỉnh sửa
-                </Button>
-              )}
-              {executable && (
-                <Button variant="danger" onClick={() => setPomodoro({ open: true })}>
-                  <Timer className="size-4" />
-                  Pomodoro
-                </Button>
-              )}
-              {items.some((item) => item.status === "COMPLETED") && (
-                <Button
-                  onClick={() => setQuizModalOpen(true)}
-                  className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 border-none shadow-[0_0_15px_rgba(245,158,11,0.35)]"
-                >
-                  <Sparkles className="size-4" />
-                  {evaluation?.quizScore != null
-                    ? `Xem lại Quiz (${evaluation.quizScore}%)`
-                    : "Làm Micro-Quiz cuối ngày"}
-                </Button>
-              )}
+
+              {/* Progressive disclosure: More options menu (AC2) */}
+              <MoreActionsMenu
+                canGenerateAi={canGenerateAi}
+                aiActive={aiActive}
+                aiSubmitting={aiSubmitting}
+                aiRecovering={aiRecovering}
+                currentDraft={currentDraft}
+                editable={Boolean(editable)}
+                executable={Boolean(executable)}
+                canCreateDraft={!draftVersionSelected && !aiBlockingMutations}
+                busy={busy}
+                hasCompletedItems={items.some((item) => item.status === "COMPLETED")}
+                evaluation={evaluation}
+                onGenerateAi={() => void handleGenerateAiDraft()}
+                onOpenBudget={openBudgetEditor}
+                onCreateDraft={() => void createDraft()}
+                onOpenHistory={() => void openPlanProgressHistory()}
+                onOpenPomodoro={() => setPomodoro({ open: true })}
+                onOpenQuiz={() => setQuizModalOpen(true)}
+                aiUnavailableReason={aiGenerationUnavailableReason}
+              />
             </div>
           </div>
+
+          {/* Compact Progress Bar */}
+          <div className="mt-5 pt-4 border-t border-slate-100">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-600 mb-1.5">
+              <span>Tiến độ thực tế</span>
+              <span className="text-indigo-700 font-black">{completion}%</span>
+            </div>
+            <ProgressBar value={completion} />
+          </div>
+
           {aiGenerationUnavailableReason && (
-            <div className="mt-5 flex items-start gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-inset ring-slate-200">
+            <div className="mt-4 flex items-start gap-2 rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
               <Info className="mt-0.5 size-4 shrink-0 text-slate-400" />
               <p>{aiGenerationUnavailableReason}</p>
             </div>
           )}
-          <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Tiến độ" value={`${completion}%`}>
-              <ProgressBar value={completion} />
-            </Metric>
-            <Metric
-              label="Nhiệm vụ"
-              value={`${items.filter((item) => item.status === "COMPLETED").length}/${items.length}`}
-            />
-            <Metric
-              label="Thời lượng dự kiến"
-              value={`${version?.totalPlannedMinutes ?? 0} phút`}
-            />
-            {evaluation?.quizScore != null ? (
-              <Metric label="Micro-Quiz cuối ngày" value={`${evaluation.quizScore}%`}>
-                <Badge tone={evaluation.quizPassed ? "emerald" : "rose"}>
-                  {evaluation.quizPassed ? "Đạt (≥ 80%)" : "Chưa đạt"}
-                </Badge>
-              </Metric>
-            ) : (
-              <Metric label="Micro-Quiz cuối ngày" value="Chưa làm">
-                {items.some((item) => item.status === "COMPLETED") ? (
-                  <span className="text-xs font-semibold text-amber-600">Sẵn sàng làm bài</span>
-                ) : (
-                  <span className="text-xs font-medium text-slate-400">Cần hoàn thành task</span>
-                )}
-              </Metric>
-            )}
-          </div>
         </div>
       </Card>
-      <DailyPlanAiExecutionStatus
-        execution={aiExecution}
-        recovering={aiRecovering}
-        pollingError={aiPollingError}
-        onRefresh={refreshAiStatus}
-        onDismiss={dismissAiFailure}
-      />
-      <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">
-        <Card className="h-fit p-4">
-          <h3 className="px-2 py-1 text-sm font-black">Phiên bản kế hoạch</h3>
-          <div className="mt-3 grid gap-2">
-            {versions.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setStepTargetId(null);
-                  setSelectedId(item.id);
-                }}
-                className={`focus-ring rounded-xl border p-3 text-left ${selectedId === item.id ? "border-indigo-300 bg-indigo-50" : "border-transparent hover:bg-slate-50"}`}
-              >
-                <div className="flex items-center justify-between">
-                  <strong className="text-sm">Version {item.versionNumber}</strong>
-                  <Badge
-                    tone={
-                      item.status === "ACTIVE"
-                        ? "emerald"
-                        : item.status === "DRAFT"
-                          ? "indigo"
-                          : "slate"
-                    }
-                  >
-                    {versionStatusLabels[item.status]}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {item.items.length} nhiệm vụ · {item.totalPlannedMinutes} phút
-                </p>
-              </button>
-            ))}
-          </div>
-        </Card>
-        <div className="space-y-3">
+
+      {/* AC3: Task-First Layout */}
+      <div className="grid gap-6 xl:grid-cols-[1fr_18rem]">
+        {/* Main Task Area (Order 1: displayed first on mobile & desktop) */}
+        <div className="order-1 space-y-4">
+          {/* AC4: Clear state banner & explanations */}
+          {draftVersionSelected && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900">
+              <Info className="size-4 shrink-0 text-indigo-600" />
+              <span>
+                <strong>Chế độ chỉnh sửa (DRAFT):</strong> Thêm/sửa nhiệm vụ và chỉnh quỹ thời gian.
+                {items.length === 0
+                  ? " Cần thêm ít nhất 1 nhiệm vụ để có thể kích hoạt."
+                  : " Nhấn 'Kích hoạt kế hoạch' khi sẵn sàng bắt đầu học."}
+              </span>
+            </div>
+          )}
+
+          {version?.status === "SUPERSEDED" && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                <span>
+                  <strong>Bản lưu trữ lịch sử (SUPERSEDED):</strong> Đang ở chế độ chỉ đọc.
+                </span>
+              </div>
+              {activeVersion && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStepTargetId(null);
+                    setSelectedId(activeVersion.id);
+                  }}
+                  className="font-bold text-indigo-700 underline hover:text-indigo-900 text-left"
+                >
+                  Chuyển sang bản ACTIVE
+                </button>
+              )}
+            </div>
+          )}
+
+          {plan.status === "COMPLETED" && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-900">
+              <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+              <span>
+                <strong>Hoàn thành:</strong> Bạn đã hoàn tất kế hoạch học tập của ngày hôm nay!
+              </span>
+            </div>
+          )}
+
+          {/* AI Decision Alert */}
           {version?.requiresUserDecision && (
             <div className="flex items-start gap-3 rounded-2xl bg-amber-50 p-4 text-amber-900 ring-1 ring-inset ring-amber-500/20">
               <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
@@ -593,6 +810,8 @@ export function DailyPlanDetailView() {
               </div>
             </div>
           )}
+
+          {/* AI Explanation Alert */}
           {version?.aiExplanation && (
             <div className="flex items-start gap-3 rounded-2xl bg-indigo-50/50 p-4 text-indigo-900 ring-1 ring-inset ring-indigo-500/20">
               <Sparkles className="mt-0.5 size-5 shrink-0 text-indigo-600" />
@@ -602,13 +821,52 @@ export function DailyPlanDetailView() {
               </div>
             </div>
           )}
+
+          {/* AC3: Hero Focus Task Card (Nhiệm vụ tiếp theo cần làm) */}
+          {executable && nextTask && (
+            <FocusTaskCard
+              item={nextTask}
+              onPomodoro={() => setPomodoro({ open: true, taskId: nextTask.id })}
+              onProgress={() => setProgressTarget(nextTask)}
+              onOpenSteps={() => setStepTargetId(nextTask.id)}
+            />
+          )}
+
+          {/* AI Execution Status (only visible when executing, recovering, or error) */}
+          <DailyPlanAiExecutionStatus
+            execution={aiExecution}
+            recovering={aiRecovering}
+            pollingError={aiPollingError}
+            onRefresh={refreshAiStatus}
+            onDismiss={dismissAiFailure}
+          />
+
+          {/* Task List Header */}
+          <div className="flex items-center justify-between pt-2">
+            <div>
+              <h3 className="text-base font-black tracking-tight text-slate-900">
+                Danh sách nhiệm vụ ({items.length})
+              </h3>
+              <p className="text-xs text-slate-500">
+                {items.filter((i) => i.status === "COMPLETED").length}/{items.length} nhiệm vụ hoàn thành
+              </p>
+            </div>
+            {editable && (
+              <Button size="sm" variant="secondary" onClick={() => void openAddTask()}>
+                <Plus className="size-3.5" />
+                Thêm nhiệm vụ
+              </Button>
+            )}
+          </div>
+
+          {/* Tasks List */}
           {items.length === 0 ? (
             <Card className="grid min-h-72 place-items-center border-dashed p-8 text-center">
               <div>
                 <ListChecks className="mx-auto size-10 text-slate-300" />
                 <h3 className="mt-4 font-black">Chưa có nhiệm vụ</h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Thêm task thủ công vào phiên bản DRAFT này.
+                  Thêm task thủ công vào phiên bản DRAFT này hoặc yêu cầu AI tạo nhiệm vụ.
                 </p>
                 {editable && (
                   <Button className="mt-5" onClick={() => void openAddTask()}>
@@ -619,21 +877,117 @@ export function DailyPlanDetailView() {
               </div>
             </Card>
           ) : (
-            items.map((item) => (
-              <DailyPlanTaskCard
-                key={item.id}
-                item={item}
-                editable={Boolean(editable)}
-                executable={Boolean(executable)}
-                onEdit={() => void openEditTask(item)}
-                onDelete={() => setDeleteTarget(item)}
-                onProgress={() => setProgressTarget(item)}
-                onHistory={() => void openProgressHistory(item)}
-                onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
-                onOpenSteps={() => setStepTargetId(item.id)}
-              />
-            ))
+            <div className="space-y-3">
+              {items.map((item) => (
+                <DailyPlanTaskCard
+                  key={item.id}
+                  item={item}
+                  editable={Boolean(editable)}
+                  executable={Boolean(executable)}
+                  onEdit={() => void openEditTask(item)}
+                  onDelete={() => setDeleteTarget(item)}
+                  onProgress={() => setProgressTarget(item)}
+                  onHistory={() => void openProgressHistory(item)}
+                  onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
+                  onOpenSteps={() => setStepTargetId(item.id)}
+                />
+              ))}
+            </div>
           )}
+        </div>
+
+        {/* Right Section: Version Selector & Summary (Order 2: secondary on mobile) */}
+        <div className="order-2 space-y-4">
+          <Card className="p-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                Phiên bản ({versions.length})
+              </h3>
+              {!draftVersionSelected && !aiBlockingMutations && (
+                <button
+                  type="button"
+                  onClick={() => void createDraft()}
+                  disabled={busy}
+                  className="focus-ring text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                  title="Tạo bản DRAFT mới"
+                >
+                  + Bản nháp
+                </button>
+              )}
+            </div>
+            <div className="mt-3 grid gap-2">
+              {versions.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setStepTargetId(null);
+                    setSelectedId(item.id);
+                  }}
+                  className={`focus-ring rounded-xl border p-3 text-left transition ${
+                    selectedId === item.id
+                      ? "border-indigo-300 bg-indigo-50/80 shadow-xs"
+                      : "border-transparent hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <strong className="text-xs font-bold text-slate-900">
+                      Version {item.versionNumber}
+                    </strong>
+                    <Badge
+                      tone={
+                        item.status === "ACTIVE"
+                          ? "emerald"
+                          : item.status === "DRAFT"
+                            ? "indigo"
+                            : "slate"
+                      }
+                    >
+                      {versionStatusLabels[item.status]}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {item.items.length} nhiệm vụ · {item.totalPlannedMinutes} phút
+                  </p>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {/* Quick Metrics Card */}
+          <Card className="p-4 space-y-3">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+              Tổng quan ngày
+            </h3>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Quỹ thời gian</span>
+                <span className="font-bold">{version?.availableMinutes ?? plan.availableMinutes} phút</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Dự kiến học</span>
+                <span className="font-bold">{version?.totalPlannedMinutes ?? 0} phút</span>
+              </div>
+              {evaluation?.quizScore != null && (
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <span className="text-slate-600">Micro-Quiz</span>
+                  <Badge tone={evaluation.quizPassed ? "emerald" : "rose"}>
+                    {evaluation.quizScore}% {evaluation.quizPassed ? "Đạt" : "Chưa đạt"}
+                  </Badge>
+                </div>
+              )}
+            </div>
+            {editable && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full mt-2"
+                onClick={openBudgetEditor}
+              >
+                <Timer className="size-3.5" />
+                Chỉnh quỹ thời gian
+              </Button>
+            )}
+          </Card>
         </div>
       </div>
       {version && addOpen && (
@@ -1238,3 +1592,295 @@ function ProgressModal({
     </Modal>
   );
 }
+
+function FocusTaskCard({
+  item,
+  onPomodoro,
+  onProgress,
+  onOpenSteps,
+}: {
+  item: DailyPlanItem;
+  onPomodoro: () => void;
+  onProgress: () => void;
+  onOpenSteps: () => void;
+}) {
+  const steps = item.steps ?? [];
+  const stepProgress = item.stepProgress;
+  const isStarted = item.status === "IN_PROGRESS";
+
+  return (
+    <div className="overflow-hidden rounded-2xl border-2 border-indigo-500/30 bg-gradient-to-br from-indigo-50/70 via-white to-purple-50/40 p-5 shadow-xs transition hover:border-indigo-500/50">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="grid size-6 place-items-center rounded-lg bg-indigo-600 text-white shadow-xs">
+            <Target className="size-3.5" />
+          </span>
+          <span className="text-[11px] font-black uppercase tracking-wider text-indigo-700">
+            Nhiệm vụ tiếp theo cần làm
+          </span>
+        </div>
+        <Badge tone={isStarted ? "indigo" : "slate"}>
+          {isStarted ? "Đang làm dở" : "Ưu tiên kế tiếp"}
+        </Badge>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <h4 className="text-base font-black text-slate-900 sm:text-lg">{item.title}</h4>
+          {item.description && (
+            <p className="mt-1 text-xs leading-5 text-slate-500 line-clamp-2">{item.description}</p>
+          )}
+          <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs font-semibold text-slate-500">
+            <span className="inline-flex items-center gap-1">
+              <Clock3 className="size-3.5 text-slate-400" />
+              {item.plannedMinutes ?? 30} phút
+            </span>
+            {(item.studyUnit || item.learningUnitTitle) && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-indigo-700">
+                Đơn vị: {item.studyUnit?.title ?? item.learningUnitTitle}
+              </span>
+            )}
+            {steps.length > 0 && (
+              <span className="text-indigo-600 font-bold">
+                {stepProgress?.completedRequiredCount ?? 0}/{stepProgress?.requiredCount ?? 0} bước
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={onPomodoro}
+            className="shadow-xs"
+            title="Bắt đầu học với Pomodoro"
+          >
+            <Timer className="size-3.5" />
+            {isStarted ? "Tiếp tục Pomodoro" : "Bắt đầu học"}
+          </Button>
+          <Button
+            size="sm"
+            variant="success"
+            onClick={onProgress}
+            title="Ghi nhận kết quả thực tế"
+          >
+            <CheckCircle2 className="size-3.5" />
+            Ghi nhận kết quả
+          </Button>
+          {steps.length > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onOpenSteps}
+              title="Xem các bước checklist"
+            >
+              <ListChecks className="size-3.5" />
+              Checklist
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MoreActionsMenu({
+  canGenerateAi,
+  aiActive,
+  aiSubmitting,
+  aiRecovering,
+  currentDraft,
+  editable,
+  executable,
+  canCreateDraft,
+  busy,
+  hasCompletedItems,
+  evaluation,
+  onGenerateAi,
+  onOpenBudget,
+  onCreateDraft,
+  onOpenHistory,
+  onOpenPomodoro,
+  onOpenQuiz,
+  aiUnavailableReason,
+}: {
+  canGenerateAi: boolean;
+  aiActive: boolean;
+  aiSubmitting: boolean;
+  aiRecovering: boolean;
+  currentDraft: DailyPlanVersion | null;
+  editable: boolean;
+  executable: boolean;
+  canCreateDraft: boolean;
+  busy: boolean;
+  hasCompletedItems: boolean;
+  evaluation: DailyEvaluation | null;
+  onGenerateAi: () => void;
+  onOpenBudget: () => void;
+  onCreateDraft: () => void;
+  onOpenHistory: () => void;
+  onOpenPomodoro: () => void;
+  onOpenQuiz: () => void;
+  aiUnavailableReason: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    function onMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener("keydown", onKeyDown);
+      document.addEventListener("mousedown", onMouseDown);
+    }
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onMouseDown);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative inline-block text-left" ref={menuRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="focus-ring inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-400 hover:bg-slate-50 transition shadow-xs"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Tùy chọn khác"
+      >
+        <MoreVertical className="size-4" />
+        <span className="hidden sm:inline">Tùy chọn khác</span>
+        <ChevronDown
+          className={`size-3 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-2 w-64 origin-top-right rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl animate-fade-up"
+        >
+          <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
+            Hành động bổ sung
+          </div>
+
+          {/* AI Generation */}
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!canGenerateAi}
+            onClick={() => {
+              setOpen(false);
+              onGenerateAi();
+            }}
+            title={aiUnavailableReason ?? undefined}
+            className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 disabled:pointer-events-none transition"
+          >
+            <Sparkles className="size-4 text-indigo-600" />
+            <span className="flex-1">
+              {aiActive
+                ? "AI đang xử lý..."
+                : aiSubmitting || aiRecovering
+                  ? "Đang gửi yêu cầu..."
+                  : currentDraft
+                    ? "Sinh lại bằng AI"
+                    : "Sinh kế hoạch bằng AI"}
+            </span>
+          </button>
+
+          {/* Edit budget if DRAFT */}
+          {editable && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onOpenBudget();
+              }}
+              className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+            >
+              <Timer className="size-4 text-slate-500" />
+              <span>Chỉnh quỹ thời gian</span>
+            </button>
+          )}
+
+          {/* Create new DRAFT version */}
+          {canCreateDraft && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={busy}
+              onClick={() => {
+                setOpen(false);
+                onCreateDraft();
+              }}
+              className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition disabled:opacity-50"
+            >
+              <CopyPlus className="size-4 text-slate-500" />
+              <span>Tạo bản chỉnh sửa (DRAFT)</span>
+            </button>
+          )}
+
+          {/* Pomodoro */}
+          {executable && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onOpenPomodoro();
+              }}
+              className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition"
+            >
+              <Timer className="size-4 text-rose-500" />
+              <span>Đồng hồ Pomodoro</span>
+            </button>
+          )}
+
+          {/* Progress History of plan */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenHistory();
+            }}
+            className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition"
+          >
+            <History className="size-4 text-slate-500" />
+            <span>Lịch sử tiến độ của ngày</span>
+          </button>
+
+          {/* Quiz */}
+          {hasCompletedItems && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                onOpenQuiz();
+              }}
+              className="focus-ring flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-bold text-amber-700 hover:bg-amber-50 transition"
+            >
+              <Sparkles className="size-4 text-amber-500" />
+              <span>
+                {evaluation?.quizScore != null
+                  ? `Xem lại Quiz (${evaluation.quizScore}%)`
+                  : "Làm Micro-Quiz cuối ngày"}
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+

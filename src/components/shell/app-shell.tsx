@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
+  CalendarCheck2,
   CalendarDays,
   Clock3,
   Files,
@@ -93,6 +94,14 @@ function QuickActions() {
       >
         <Plus className="size-3.5" />
         Tạo lộ trình
+      </Link>
+      <Link
+        href="/daily-plans/today"
+        className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/90 px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-100 shadow-xs transition"
+        title="Đến công việc học của ngày hôm nay"
+      >
+        <CalendarCheck2 className="size-3.5 text-indigo-600" />
+        Hôm nay
       </Link>
       <Link
         href="/daily-plans"
