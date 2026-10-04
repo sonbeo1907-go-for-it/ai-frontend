@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError } from "@/lib/api-client";
 import type { AiExecution, TaskGuidanceOverview, TaskGuidanceRevision } from "@/types/api";
+import { aiExecutionPoller } from "@/lib/ai-execution-poller";
+import { useAiExecutionPolling } from "@/lib/use-ai-execution-polling";
 import {
   belongsToTaskGuidance,
   clearRememberedTaskGuidanceExecution,
@@ -12,9 +14,6 @@ import {
   taskGuidanceApi,
 } from "./task-guidance-api";
 import { getTaskGuidanceErrorMessage, isMissingTaskGuidance } from "./task-guidance-errors";
-
-const POLL_INTERVAL_MS = 2_000;
-const MAX_POLL_INTERVAL_MS = 30_000;
 
 type SubmissionIntent = {
   operation: "GENERATE" | "REGENERATE";
@@ -57,6 +56,7 @@ export function useTaskGuidance({ planId, versionId, itemId, contextKey }: UseTa
       rememberTaskGuidanceExecution(planId, versionId, itemId, nextExecution.id);
       setExecution(nextExecution);
       setPollingError("");
+      aiExecutionPoller.seedExecution(nextExecution);
     },
     [itemId, planId, versionId],
   );
@@ -158,84 +158,38 @@ export function useTaskGuidance({ planId, versionId, itemId, contextKey }: UseTa
   const activeExecutionId =
     execution && isActiveTaskGuidanceExecution(execution) ? execution.id : null;
 
-  useEffect(() => {
-    if (!activeExecutionId) return;
-    const executionId = activeExecutionId;
-    let cancelled = false;
-    let requestInFlight = false;
-    let timeoutId: number | undefined;
-    let consecutiveFailures = 0;
+  const {
+    execution: polledExecution,
+    error: polledError,
+    refreshStatus: refreshPolledStatus,
+  } = useAiExecutionPolling(activeExecutionId);
 
-    function clearPoll() {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      timeoutId = undefined;
-    }
+  const currentExecution = polledExecution ?? execution;
+  const belongs = currentExecution ? belongsToTaskGuidance(currentExecution, itemId) : true;
+  const effectiveExecution = belongs ? currentExecution : null;
 
-    function schedule(delay: number) {
-      clearPoll();
-      if (cancelled || document.visibilityState === "hidden") return;
-      timeoutId = window.setTimeout(() => void poll(), delay);
-    }
-
-    async function poll() {
-      if (cancelled || requestInFlight || document.visibilityState === "hidden") return;
-      requestInFlight = true;
-
-      try {
-        const nextExecution = await taskGuidanceApi.getExecution(executionId);
-        if (cancelled) return;
-        if (!belongsToTaskGuidance(nextExecution, itemId)) {
-          clearRemembered(executionId);
-          setExecution(null);
-          setPollingError("Tiến trình AI không thuộc nhiệm vụ đang xem.");
-          return;
-        }
-
-        setExecution(nextExecution);
-        setPollingError("");
-        consecutiveFailures = 0;
-        if (isActiveTaskGuidanceExecution(nextExecution)) schedule(POLL_INTERVAL_MS);
-      } catch (requestError) {
-        if (cancelled) return;
-        consecutiveFailures += 1;
-        setPollingError(getTaskGuidanceErrorMessage(requestError));
-        schedule(Math.min(POLL_INTERVAL_MS * 2 ** (consecutiveFailures - 1), MAX_POLL_INTERVAL_MS));
-      } finally {
-        requestInFlight = false;
-      }
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === "hidden") {
-        clearPoll();
-      } else {
-        consecutiveFailures = 0;
-        void poll();
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    schedule(POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearPoll();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [activeExecutionId, clearRemembered, itemId]);
+  const effectivePollingError = !belongs
+    ? "Tiến trình AI không thuộc nhiệm vụ đang xem."
+    : polledError
+      ? getTaskGuidanceErrorMessage(polledError)
+      : pollingError;
 
   useEffect(() => {
-    if (!execution || isActiveTaskGuidanceExecution(execution)) return;
-    if (handledExecutionsRef.current.has(execution.id)) return;
+    if (!effectiveExecution || isActiveTaskGuidanceExecution(effectiveExecution)) return;
+    if (handledExecutionsRef.current.has(effectiveExecution.id)) return;
 
-    if (execution.status === "FAILED") {
-      handledExecutionsRef.current.add(execution.id);
-      clearRemembered(execution.id);
+    if (effectiveExecution.status === "FAILED") {
+      handledExecutionsRef.current.add(effectiveExecution.id);
+      clearRemembered(effectiveExecution.id);
       submissionIntentRef.current = null;
       return;
     }
-    if (!execution.resultId || execution.resultType !== "TASK_GUIDANCE_REVISION") {
-      handledExecutionsRef.current.add(execution.id);
-      clearRemembered(execution.id);
+    if (
+      !effectiveExecution.resultId ||
+      effectiveExecution.resultType !== "TASK_GUIDANCE_REVISION"
+    ) {
+      handledExecutionsRef.current.add(effectiveExecution.id);
+      clearRemembered(effectiveExecution.id);
       submissionIntentRef.current = null;
       const timeoutId = window.setTimeout(
         () => setPollingError("AI đã hoàn tất nhưng không trả về phiên bản hướng dẫn hợp lệ."),
@@ -246,13 +200,13 @@ export function useTaskGuidance({ planId, versionId, itemId, contextKey }: UseTa
 
     let cancelled = false;
     const timeoutId = window.setTimeout(() => {
-      if (handledExecutionsRef.current.has(execution.id)) return;
-      handledExecutionsRef.current.add(execution.id);
-      clearRemembered(execution.id);
+      if (handledExecutionsRef.current.has(effectiveExecution.id)) return;
+      handledExecutionsRef.current.add(effectiveExecution.id);
+      clearRemembered(effectiveExecution.id);
       submissionIntentRef.current = null;
       setLoadingRevision(true);
       void Promise.all([
-        taskGuidanceApi.getRevision(planId, versionId, itemId, execution.resultId!),
+        taskGuidanceApi.getRevision(planId, versionId, itemId, effectiveExecution.resultId!),
         taskGuidanceApi.getOverview(planId, versionId, itemId, 0, 10),
       ])
         .then(([revision, nextOverview]) => {
@@ -274,7 +228,7 @@ export function useTaskGuidance({ planId, versionId, itemId, contextKey }: UseTa
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [clearRemembered, execution, itemId, planId, versionId]);
+  }, [clearRemembered, effectiveExecution, itemId, planId, versionId]);
 
   const submit = useCallback(
     async (operation: "GENERATE" | "REGENERATE", adjustmentInstruction?: string) => {
@@ -337,14 +291,14 @@ export function useTaskGuidance({ planId, versionId, itemId, contextKey }: UseTa
   return {
     overview,
     selectedRevision,
-    execution,
+    execution: effectiveExecution,
     loading,
     loadingRevision,
     recovering,
     submitting,
     error,
-    pollingError,
-    active: Boolean(execution && isActiveTaskGuidanceExecution(execution)),
+    pollingError: effectivePollingError,
+    active: Boolean(effectiveExecution && isActiveTaskGuidanceExecution(effectiveExecution)),
     generate: () => submit("GENERATE"),
     regenerate: (adjustmentInstruction?: string) => submit("REGENERATE", adjustmentInstruction),
     selectRevision,
@@ -352,6 +306,10 @@ export function useTaskGuidance({ planId, versionId, itemId, contextKey }: UseTa
     refresh: () => {
       setError("");
       setPollingError("");
+      if (activeExecutionId) {
+        refreshPolledStatus();
+        return;
+      }
       setRefreshToken((current) => current + 1);
     },
     dismissFailure,

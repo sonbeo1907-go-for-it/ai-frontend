@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { ApiClientError, getErrorMessage } from "@/lib/api-client";
+import { aiExecutionPoller } from "@/lib/ai-execution-poller";
+import { useAiExecutionPolling } from "@/lib/use-ai-execution-polling";
 import type { AiExecution, MasteryCheckResult, QuizDetail, WeakTopic } from "@/types/api";
-import { getAiExecution } from "./evaluation-api";
 import {
   getLatestMasteryCheckExecution,
   getMasteryCheckHistory,
@@ -91,48 +92,37 @@ export function MasteryCheckModal({ topic, onClose, onUpdated }: MasteryCheckMod
     };
   }, [loadQuiz, weakTopicId]);
 
+  const activeExecutionId = weakTopicId && execution && isRunning(execution) ? execution.id : null;
+
+  const { execution: polledExecution, error: polledError } =
+    useAiExecutionPolling(activeExecutionId);
+
+  const currentExecution = polledExecution ?? execution;
+  const lastHandledQuizIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!weakTopicId || !execution || !isRunning(execution)) return;
-    const executionId = execution.id;
-    let cancelled = false;
-    let timer: number | undefined;
+    if (!polledExecution || !activeExecutionId || polledExecution.id !== activeExecutionId) {
+      return;
+    }
 
-    async function poll() {
-      if (cancelled || document.visibilityState === "hidden") return;
-      try {
-        const latest = await getAiExecution(executionId);
-        if (cancelled) return;
-        setExecution(latest);
-        if (latest.status === "SUCCEEDED") {
-          if (latest.resultType !== "QUIZ" || !latest.resultId) {
-            setError("AI hoàn tất nhưng không trả về bài kiểm tra hợp lệ.");
-            return;
-          }
-          await loadQuiz(weakTopicId!, latest.resultId);
-          setHistory(await getMasteryCheckHistory(weakTopicId!));
-        } else if (isRunning(latest)) {
-          timer = window.setTimeout(() => void poll(), 2_000);
-        }
-      } catch (requestError) {
-        if (cancelled) return;
-        setError(getErrorMessage(requestError));
-        timer = window.setTimeout(() => void poll(), 5_000);
+    if (polledExecution.status === "SUCCEEDED") {
+      if (polledExecution.resultType !== "QUIZ" || !polledExecution.resultId) {
+        return;
       }
+      if (lastHandledQuizIdRef.current === polledExecution.resultId) return;
+      lastHandledQuizIdRef.current = polledExecution.resultId;
+      void loadQuiz(weakTopicId!, polledExecution.resultId);
+      void getMasteryCheckHistory(weakTopicId!).then(setHistory);
     }
+  }, [activeExecutionId, loadQuiz, polledExecution, weakTopicId]);
 
-    function handleVisibilityChange() {
-      if (timer !== undefined) window.clearTimeout(timer);
-      if (document.visibilityState === "visible") void poll();
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    timer = window.setTimeout(() => void poll(), 2_000);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [execution, loadQuiz, weakTopicId]);
+  const displayError =
+    polledExecution?.status === "SUCCEEDED" &&
+    (polledExecution.resultType !== "QUIZ" || !polledExecution.resultId)
+      ? "AI hoàn tất nhưng không trả về bài kiểm tra hợp lệ."
+      : polledError
+        ? getErrorMessage(polledError)
+        : error;
 
   async function generate() {
     if (!weakTopicId || submitting || isRunning(execution)) return;
@@ -144,6 +134,7 @@ export function MasteryCheckModal({ topic, onClose, onUpdated }: MasteryCheckMod
       setResult(null);
       setAnswers({});
       setExecution(queued);
+      aiExecutionPoller.seedExecution(queued);
     } catch (requestError) {
       setError(getErrorMessage(requestError));
     } finally {
@@ -206,7 +197,7 @@ export function MasteryCheckModal({ topic, onClose, onUpdated }: MasteryCheckMod
       width="max-w-2xl"
     >
       <div className="max-h-[70vh] space-y-5 overflow-y-auto p-1">
-        {loading || isRunning(execution) ? (
+        {loading || isRunning(currentExecution) ? (
           <div className="flex flex-col items-center gap-3 py-10 text-center">
             <LoaderCircle className="size-9 animate-spin text-indigo-600" />
             <p className="text-sm text-slate-600">
@@ -273,23 +264,23 @@ export function MasteryCheckModal({ topic, onClose, onUpdated }: MasteryCheckMod
         ) : (
           <div className="space-y-4 py-8 text-center">
             <p className="text-sm text-slate-600">
-              {execution?.status === "FAILED"
+              {currentExecution?.status === "FAILED"
                 ? "AI chưa thể tạo bài kiểm tra. Chủ đề này vẫn cần được củng cố."
                 : "Tạo bài kiểm tra dành riêng cho đơn vị học này."}
             </p>
             {topic.status !== "MASTERED" && (
               <Button onClick={() => void generate()} loading={submitting}>
-                {execution?.status === "FAILED" ? "Thử lại" : "Tạo bài kiểm tra"}
+                {currentExecution?.status === "FAILED" ? "Thử lại" : "Tạo bài kiểm tra"}
               </Button>
             )}
           </div>
         )}
-        {(error || execution?.failureMessage) && (
+        {(displayError || currentExecution?.failureMessage) && (
           <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">
-            {error || execution?.failureMessage}
+            {displayError || currentExecution?.failureMessage}
           </p>
         )}
-        {history.length > 0 && !isRunning(execution) && (
+        {history.length > 0 && !isRunning(currentExecution) && (
           <div className="border-t border-slate-200 pt-4">
             <h3 className="mb-2 text-sm font-bold text-slate-900">Lịch sử kiểm tra</h3>
             <div className="flex flex-wrap gap-2">

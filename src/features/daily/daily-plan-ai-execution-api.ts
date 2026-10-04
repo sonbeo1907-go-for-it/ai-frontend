@@ -17,8 +17,10 @@ export function queueDailyPlanRegeneration(dailyPlanId: string, idempotencyKey: 
   });
 }
 
-export function getAiExecution(executionId: string) {
-  return apiRequest<AiExecution>(`/api/v1/ai-executions/${executionId}`);
+export function getAiExecution(executionId: string, options?: { signal?: AbortSignal }) {
+  return apiRequest<AiExecution>(`/api/v1/ai-executions/${executionId}`, {
+    signal: options?.signal,
+  });
 }
 
 export function getLatestDailyPlanAiExecution(dailyPlanId: string) {

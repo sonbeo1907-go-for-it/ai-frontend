@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError, getErrorMessage } from "@/lib/api-client";
+import { aiExecutionPoller } from "@/lib/ai-execution-poller";
+import { useAiExecutionPolling } from "@/lib/use-ai-execution-polling";
 import type { AiExecution } from "@/types/api";
 import {
   belongsToRoadmap,
@@ -15,9 +17,6 @@ import {
   rememberRoadmapAiExecution,
 } from "./roadmap-ai-execution-api";
 
-const POLL_INTERVAL_MS = 2_000;
-const MAX_POLL_INTERVAL_MS = 30_000;
-
 type SuccessfulExecutionHandler = (
   resultId: string,
   execution: AiExecution,
@@ -29,12 +28,11 @@ type SubmissionIntent = {
 };
 
 export function useRoadmapAiExecution(roadmapId: string, onSucceeded: SuccessfulExecutionHandler) {
-  const [execution, setExecution] = useState<AiExecution | null>(null);
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [pollingError, setPollingError] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
   const [recoveryRefreshToken, setRecoveryRefreshToken] = useState(0);
-  const [pollingRefreshToken, setPollingRefreshToken] = useState(0);
   const submissionIntentRef = useRef<SubmissionIntent | null>(null);
   const handledTerminalExecutionsRef = useRef(new Set<string>());
   const onSucceededRef = useRef(onSucceeded);
@@ -43,18 +41,35 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
     onSucceededRef.current = onSucceeded;
   }, [onSucceeded]);
 
+  const {
+    execution: polledExecution,
+    error: polledError,
+    refreshStatus: refreshPolledStatus,
+  } = useAiExecutionPolling(activeExecutionId);
+
+  const belongs = polledExecution ? belongsToRoadmap(polledExecution, roadmapId) : true;
+  const execution = belongs ? polledExecution : null;
+
+  const pollingError = !belongs
+    ? "Tiến trình AI không thuộc lộ trình này."
+    : polledError
+      ? getErrorMessage(polledError)
+      : recoveryError;
+
   const acceptExecution = useCallback(
     (nextExecution: AiExecution) => {
       if (!belongsToRoadmap(nextExecution, roadmapId)) {
         throw new Error("The backend returned an AI execution for a different Roadmap.");
       }
       rememberRoadmapAiExecution(roadmapId, nextExecution.id);
-      setExecution(nextExecution);
-      setPollingError("");
+      aiExecutionPoller.seedExecution(nextExecution);
+      setActiveExecutionId(nextExecution.id);
+      setRecoveryError("");
     },
     [roadmapId],
   );
 
+  // AC6: Reload recovery from Backend
   useEffect(() => {
     let cancelled = false;
 
@@ -63,25 +78,48 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
       const rememberedExecutionId = readRememberedRoadmapAiExecution(roadmapId);
 
       try {
-        const recoveredExecution = rememberedExecutionId
-          ? await getAiExecution(rememberedExecutionId)
-          : await getLatestRoadmapAiExecution(roadmapId);
+        let recoveredExecution: AiExecution | null = null;
+        if (rememberedExecutionId) {
+          try {
+            recoveredExecution = await getAiExecution(rememberedExecutionId);
+          } catch (error) {
+            if (error instanceof ApiClientError && error.details.status === 404) {
+              clearRememberedRoadmapAiExecution(roadmapId, rememberedExecutionId);
+              try {
+                recoveredExecution = await getLatestRoadmapAiExecution(roadmapId);
+              } catch (latestError) {
+                if (latestError instanceof ApiClientError && latestError.details.status === 404) {
+                  setRecoveryError("Không thể khôi phục tiến trình.");
+                } else {
+                  throw latestError;
+                }
+              }
+            } else {
+              throw error;
+            }
+          }
+        } else {
+          try {
+            recoveredExecution = await getLatestRoadmapAiExecution(roadmapId);
+          } catch (latestError) {
+            if (!(latestError instanceof ApiClientError && latestError.details.status === 404)) {
+              throw latestError;
+            }
+          }
+        }
 
         if (cancelled) return;
-        if (!belongsToRoadmap(recoveredExecution, roadmapId)) {
-          clearRememberedRoadmapAiExecution(roadmapId, rememberedExecutionId ?? undefined);
-          setPollingError("Tiến trình AI không thuộc lộ trình này.");
-        } else if (rememberedExecutionId || isActiveAiExecution(recoveredExecution)) {
-          acceptExecution(recoveredExecution);
+        if (recoveredExecution) {
+          if (!belongsToRoadmap(recoveredExecution, roadmapId)) {
+            clearRememberedRoadmapAiExecution(roadmapId, rememberedExecutionId ?? undefined);
+            setRecoveryError("Tiến trình AI không thuộc lộ trình này.");
+          } else if (rememberedExecutionId || isActiveAiExecution(recoveredExecution)) {
+            acceptExecution(recoveredExecution);
+          }
         }
       } catch (error) {
         if (cancelled) return;
-
-        if (error instanceof ApiClientError && error.details.status === 404) {
-          clearRememberedRoadmapAiExecution(roadmapId, rememberedExecutionId ?? undefined);
-        } else {
-          setPollingError(getErrorMessage(error));
-        }
+        setRecoveryError(getErrorMessage(error));
       } finally {
         if (!cancelled) setRecovering(false);
       }
@@ -92,91 +130,6 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
       cancelled = true;
     };
   }, [acceptExecution, recoveryRefreshToken, roadmapId]);
-
-  const activeExecutionId = execution && isActiveAiExecution(execution) ? execution.id : null;
-
-  useEffect(() => {
-    if (!activeExecutionId) return;
-
-    const executionId = activeExecutionId;
-    let cancelled = false;
-    let timeoutId: number | undefined;
-    let consecutiveFailures = 0;
-    let requestInFlight = false;
-
-    function clearScheduledPoll() {
-      if (timeoutId === undefined) return;
-      window.clearTimeout(timeoutId);
-      timeoutId = undefined;
-    }
-
-    function scheduleNextPoll(delayMs: number) {
-      clearScheduledPoll();
-      if (cancelled || document.visibilityState === "hidden") return;
-      timeoutId = window.setTimeout(() => void poll(), delayMs);
-    }
-
-    async function poll() {
-      if (cancelled || requestInFlight || document.visibilityState === "hidden") return;
-      requestInFlight = true;
-
-      try {
-        const nextExecution = await getAiExecution(executionId);
-        if (cancelled) return;
-
-        if (!belongsToRoadmap(nextExecution, roadmapId)) {
-          clearRememberedRoadmapAiExecution(roadmapId, executionId);
-          setExecution(null);
-          setPollingError("Tiến trình AI không thuộc lộ trình này.");
-          return;
-        }
-
-        setExecution(nextExecution);
-        setPollingError("");
-        consecutiveFailures = 0;
-        if (isActiveAiExecution(nextExecution)) {
-          scheduleNextPoll(POLL_INTERVAL_MS);
-        }
-      } catch (error) {
-        if (cancelled) return;
-
-        consecutiveFailures += 1;
-        setPollingError(getErrorMessage(error));
-        const retryDelay = Math.min(
-          POLL_INTERVAL_MS * 2 ** (consecutiveFailures - 1),
-          MAX_POLL_INTERVAL_MS,
-        );
-        scheduleNextPoll(retryDelay);
-      } finally {
-        requestInFlight = false;
-      }
-    }
-
-    function handleVisibilityChange() {
-      const hidden = document.visibilityState === "hidden";
-
-      if (hidden) {
-        clearScheduledPoll();
-        return;
-      }
-
-      consecutiveFailures = 0;
-      void poll();
-    }
-
-    const initiallyHidden = document.visibilityState === "hidden";
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    if (!initiallyHidden) {
-      scheduleNextPoll(pollingRefreshToken > 0 ? 0 : POLL_INTERVAL_MS);
-    }
-
-    return () => {
-      cancelled = true;
-      clearScheduledPoll();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [activeExecutionId, pollingRefreshToken, roadmapId]);
 
   useEffect(() => {
     if (!execution || isActiveAiExecution(execution)) return;
@@ -189,15 +142,15 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
     if (execution.status === "FAILED") return;
     if (!execution.resultId) {
       window.setTimeout(
-        () => setPollingError("AI đã hoàn tất nhưng không trả về phiên bản lộ trình."),
+        () => setRecoveryError("AI đã hoàn tất nhưng không trả về phiên bản lộ trình."),
         0,
       );
       return;
     }
 
     void Promise.resolve(onSucceededRef.current(execution.resultId, execution))
-      .then(() => setExecution(null))
-      .catch((error) => setPollingError(getErrorMessage(error)));
+      .then(() => setActiveExecutionId(null))
+      .catch((error) => setRecoveryError(getErrorMessage(error)));
   }, [execution, roadmapId]);
 
   const submit = useCallback(
@@ -210,7 +163,7 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
 
       submissionIntentRef.current = { fingerprint, idempotencyKey };
       setSubmitting(true);
-      setPollingError("");
+      setRecoveryError("");
 
       try {
         const acceptedExecution = await run(idempotencyKey);
@@ -247,19 +200,21 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
   );
 
   const dismissFailure = useCallback(() => {
-    if (execution) clearRememberedRoadmapAiExecution(roadmapId, execution.id);
-    setExecution(null);
-    setPollingError("");
-  }, [execution, roadmapId]);
+    if (activeExecutionId) {
+      clearRememberedRoadmapAiExecution(roadmapId, activeExecutionId);
+      setActiveExecutionId(null);
+    }
+    setRecoveryError("");
+  }, [activeExecutionId, roadmapId]);
 
   const refreshStatus = useCallback(() => {
-    setPollingError("");
-    if (execution && isActiveAiExecution(execution)) {
-      setPollingRefreshToken((current) => current + 1);
+    setRecoveryError("");
+    if (activeExecutionId) {
+      refreshPolledStatus();
       return;
     }
     setRecoveryRefreshToken((current) => current + 1);
-  }, [execution]);
+  }, [activeExecutionId, refreshPolledStatus]);
 
   return {
     execution,

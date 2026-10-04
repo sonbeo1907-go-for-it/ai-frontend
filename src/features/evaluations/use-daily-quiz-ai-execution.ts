@@ -2,17 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError, getErrorMessage } from "@/lib/api-client";
+import { aiExecutionPoller } from "@/lib/ai-execution-poller";
+import { useAiExecutionPolling } from "@/lib/use-ai-execution-polling";
 import type { AiExecution } from "@/types/api";
-import {
-  getAiExecution,
-  getLatestDailyQuizExecution,
-  queueDailyQuizGeneration,
-} from "./evaluation-api";
+import { getLatestDailyQuizExecution, queueDailyQuizGeneration } from "./evaluation-api";
 
-const POLL_INTERVAL_MS = 2_000;
-const MAX_POLL_INTERVAL_MS = 30_000;
-
-function isActive(execution: AiExecution) {
+function isActive(execution: AiExecution | null | undefined) {
+  if (!execution) return false;
   return execution.status === "QUEUED" || execution.status === "RUNNING";
 }
 
@@ -25,10 +21,10 @@ export function useDailyQuizAiExecution(
   enabled: boolean,
   onSucceeded: (quizId: string) => Promise<void> | void,
 ) {
-  const [execution, setExecution] = useState<AiExecution | null>(null);
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [pollingError, setPollingError] = useState("");
+  const [recoveryError, setRecoveryError] = useState("");
   const handledExecutionsRef = useRef(new Set<string>());
   const onSucceededRef = useRef(onSucceeded);
 
@@ -36,12 +32,26 @@ export function useDailyQuizAiExecution(
     onSucceededRef.current = onSucceeded;
   }, [onSucceeded]);
 
+  const { execution: polledExecution, error: polledError } = useAiExecutionPolling(
+    enabled ? activeExecutionId : null,
+  );
+
+  const isQuiz = polledExecution ? isDailyQuizExecution(polledExecution) : true;
+  const execution = isQuiz ? polledExecution : null;
+
+  const pollingError = !isQuiz
+    ? "Tiến trình AI không phải là tiến trình tạo Micro-Quiz."
+    : polledError
+      ? getErrorMessage(polledError)
+      : recoveryError;
+
   const acceptExecution = useCallback((nextExecution: AiExecution) => {
     if (!isDailyQuizExecution(nextExecution)) {
       throw new Error("Tiến trình AI không phải là tiến trình tạo Micro-Quiz.");
     }
-    setExecution(nextExecution);
-    setPollingError("");
+    aiExecutionPoller.seedExecution(nextExecution);
+    setActiveExecutionId(nextExecution.id);
+    setRecoveryError("");
   }, []);
 
   useEffect(() => {
@@ -55,7 +65,7 @@ export function useDailyQuizAiExecution(
         if (!cancelled && isActive(latest)) acceptExecution(latest);
       } catch (error) {
         if (!cancelled && !(error instanceof ApiClientError && error.details.status === 404)) {
-          setPollingError(getErrorMessage(error));
+          setRecoveryError(getErrorMessage(error));
         }
       } finally {
         if (!cancelled) setRecovering(false);
@@ -68,55 +78,6 @@ export function useDailyQuizAiExecution(
     };
   }, [acceptExecution, dailyPlanId, enabled]);
 
-  const activeExecutionId = execution && isActive(execution) ? execution.id : null;
-
-  useEffect(() => {
-    if (!enabled || !activeExecutionId) return;
-    const executionId = activeExecutionId;
-    let cancelled = false;
-    let requestInFlight = false;
-    let timeoutId: number | undefined;
-    let consecutiveFailures = 0;
-
-    function schedule(delay: number) {
-      if (cancelled || document.visibilityState === "hidden") return;
-      timeoutId = window.setTimeout(() => void poll(), delay);
-    }
-
-    async function poll() {
-      if (cancelled || requestInFlight || document.visibilityState === "hidden") return;
-      requestInFlight = true;
-      try {
-        const nextExecution = await getAiExecution(executionId);
-        if (cancelled) return;
-        acceptExecution(nextExecution);
-        consecutiveFailures = 0;
-        if (isActive(nextExecution)) schedule(POLL_INTERVAL_MS);
-      } catch (error) {
-        if (cancelled) return;
-        consecutiveFailures += 1;
-        setPollingError(getErrorMessage(error));
-        schedule(Math.min(POLL_INTERVAL_MS * 2 ** (consecutiveFailures - 1), MAX_POLL_INTERVAL_MS));
-      } finally {
-        requestInFlight = false;
-      }
-    }
-
-    function handleVisibilityChange() {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      timeoutId = undefined;
-      if (document.visibilityState === "visible") void poll();
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    schedule(POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [acceptExecution, activeExecutionId, enabled]);
-
   useEffect(() => {
     if (!execution || isActive(execution)) return;
     if (handledExecutionsRef.current.has(execution.id)) return;
@@ -125,18 +86,20 @@ export function useDailyQuizAiExecution(
     if (execution.status === "FAILED") return;
     if (!execution.resultId || execution.resultType !== "QUIZ") {
       window.setTimeout(() => {
-        setPollingError("AI đã hoàn tất nhưng không trả về Micro-Quiz hợp lệ.");
+        setRecoveryError("AI đã hoàn tất nhưng không trả về Micro-Quiz hợp lệ.");
       }, 0);
       return;
     }
-    void Promise.resolve(onSucceededRef.current(execution.resultId)).catch((error) => {
-      setPollingError(getErrorMessage(error));
-    });
+    void Promise.resolve(onSucceededRef.current(execution.resultId))
+      .then(() => setActiveExecutionId(null))
+      .catch((error) => {
+        setRecoveryError(getErrorMessage(error));
+      });
   }, [execution]);
 
   const generate = useCallback(async () => {
     setSubmitting(true);
-    setPollingError("");
+    setRecoveryError("");
     try {
       const accepted = await queueDailyQuizGeneration(dailyPlanId, crypto.randomUUID());
       acceptExecution(accepted);
@@ -147,8 +110,8 @@ export function useDailyQuizAiExecution(
   }, [acceptExecution, dailyPlanId]);
 
   const dismiss = useCallback(() => {
-    setExecution(null);
-    setPollingError("");
+    setActiveExecutionId(null);
+    setRecoveryError("");
   }, []);
 
   return {

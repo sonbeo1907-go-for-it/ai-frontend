@@ -16,8 +16,10 @@ export const taskGuidanceApi = {
     idempotencyKey: string,
   ) => dailyPlanApi.regenerateTaskGuidance(planId, versionId, itemId, input, idempotencyKey),
   getCurrentExecution: dailyPlanApi.getCurrentTaskGuidanceExecution,
-  getExecution: (executionId: string) =>
-    apiRequest<AiExecution>(`/api/v1/ai-executions/${executionId}`),
+  getExecution: (executionId: string, options?: { signal?: AbortSignal }) =>
+    apiRequest<AiExecution>(`/api/v1/ai-executions/${executionId}`, {
+      signal: options?.signal,
+    }),
 };
 
 export function isActiveTaskGuidanceExecution(execution: AiExecution) {
