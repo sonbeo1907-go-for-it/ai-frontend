@@ -57,6 +57,7 @@ export interface ApiResponse<T> {
 }
 export interface FieldViolation {
   field: string;
+  code?: string;
   message: string;
 }
 export interface ApiErrorBody {
