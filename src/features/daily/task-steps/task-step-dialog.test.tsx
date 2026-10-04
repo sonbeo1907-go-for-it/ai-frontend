@@ -38,20 +38,14 @@ const item: DailyPlanItem = {
   },
 };
 
-const completedResponse: DailyPlanTaskStepsResponse = {
-  dailyPlanItemId: "item-1",
-  steps: [{ ...item.steps[0], completed: true, stateVersion: 3 }],
-  progress: {
-    requiredCount: 1,
-    completedRequiredCount: 1,
-    completionPercentage: 100,
-    allRequiredStepsCompleted: true,
-  },
-};
-
 function renderDialog(
   onStepsChanged = vi.fn(),
-  options: { item?: DailyPlanItem; editable?: boolean; executable?: boolean } = {},
+  options: {
+    item?: DailyPlanItem;
+    editable?: boolean;
+    executable?: boolean;
+    onRecordOutcome?: ReturnType<typeof vi.fn>;
+  } = {},
 ) {
   render(
     <ToastProvider>
@@ -64,7 +58,7 @@ function renderDialog(
         executable={options.executable ?? true}
         onClose={vi.fn()}
         onStepsChanged={onStepsChanged}
-        onRecordOutcome={vi.fn()}
+        onRecordOutcome={options.onRecordOutcome ?? vi.fn()}
       />
     </ToastProvider>,
   );
@@ -128,26 +122,18 @@ describe("TaskStepDialog", () => {
     expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/steps"))).toBe(false);
   });
 
-  it("updates runtime completion with the observed state version", async () => {
-    installFetch((url) =>
-      url.endsWith("/steps/step-1/completion")
-        ? jsonResponse({ data: completedResponse })
-        : undefined,
-    );
+  it("asks for the parent outcome before completing the final required step", async () => {
     const onStepsChanged = vi.fn();
-    renderDialog(onStepsChanged);
+    const onRecordOutcome = vi.fn();
+    renderDialog(onStepsChanged, { onRecordOutcome });
 
     fireEvent.click(screen.getByRole("checkbox", { name: /Hoàn thành/ }));
 
-    await waitFor(() => expect(onStepsChanged).toHaveBeenCalledWith(completedResponse));
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/v1/daily-plans/plan-1/versions/version-1/items/item-1/steps/step-1/completion",
-      expect.objectContaining({
-        method: "PUT",
-        body: JSON.stringify({ completed: true, stateVersion: 2 }),
-      }),
-    );
-    expect(screen.getByText("Ghi kết quả nhiệm vụ")).not.toBeNull();
+    expect(onRecordOutcome).toHaveBeenCalledWith(item, item.steps[0]);
+    expect(onStepsChanged).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/steps/step-1/completion")),
+    ).toBe(false);
   });
 
   it("adds a manual step to a DRAFT without reloading the whole plan", async () => {

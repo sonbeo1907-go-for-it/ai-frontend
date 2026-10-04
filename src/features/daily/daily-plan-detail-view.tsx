@@ -37,6 +37,7 @@ import { isValidStudyDuration } from "@/lib/study-duration";
 import type {
   DailyPlan,
   DailyPlanItem,
+  DailyPlanTaskStep,
   DailyPlanTaskStepsResponse,
   DailyPlanVersion,
   DailyTaskCategory,
@@ -81,6 +82,8 @@ export function DailyPlanDetailView() {
   const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
   const [activationConfirmOpen, setActivationConfirmOpen] = useState(false);
   const [progressTarget, setProgressTarget] = useState<DailyPlanItem | null>(null);
+  const [completionStepTarget, setCompletionStepTarget] =
+    useState<DailyPlanTaskStep | null>(null);
   const [historyTarget, setHistoryTarget] = useState<DailyPlanItem | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ProgressEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -182,7 +185,9 @@ export function DailyPlanDetailView() {
   const items = version?.items ?? [];
   const earned = items.reduce(
     (sum, item) =>
-      sum + (item.status === "COMPLETED" ? 100 : item.status === "PARTIALLY_COMPLETED" ? 50 : 0),
+      sum +
+      (item.completionPercentage ??
+        (item.status === "COMPLETED" ? 100 : item.status === "PARTIALLY_COMPLETED" ? 50 : 0)),
     0,
   );
   const completion = items.length ? Math.round((earned / items.length) * 10) / 10 : 0;
@@ -892,7 +897,10 @@ export function DailyPlanDetailView() {
                   executable={Boolean(executable)}
                   onEdit={() => void openEditTask(item)}
                   onDelete={() => setDeleteTarget(item)}
-                  onProgress={() => setProgressTarget(item)}
+                  onProgress={() => {
+                    setCompletionStepTarget(null);
+                    setProgressTarget(item);
+                  }}
                   onHistory={() => void openProgressHistory(item)}
                   onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
                   onOpenSteps={() => setStepTargetId(item.id)}
@@ -1068,8 +1076,9 @@ export function DailyPlanDetailView() {
           executable={Boolean(executable)}
           onClose={() => setStepTargetId(null)}
           onStepsChanged={(response) => updateTaskSteps(version.id, response)}
-          onRecordOutcome={(item) => {
+          onRecordOutcome={(item, step) => {
             setStepTargetId(null);
+            setCompletionStepTarget(step);
             setProgressTarget(item);
           }}
         />
@@ -1078,10 +1087,40 @@ export function DailyPlanDetailView() {
         <ProgressModal
           open
           item={progressTarget}
-          onClose={() => setProgressTarget(null)}
+          title={completionStepTarget ? "Hoàn thành bước và nhiệm vụ" : undefined}
+          onClose={() => {
+            setProgressTarget(null);
+            setCompletionStepTarget(null);
+          }}
           onSave={async (values, idempotencyKey) => {
+            if (completionStepTarget && version) {
+              try {
+                await dailyPlanApi.completeTaskStepAndRecordProgress(
+                  id,
+                  version.id,
+                  progressTarget.id,
+                  completionStepTarget.id,
+                  completionStepTarget.stateVersion,
+                  values,
+                  idempotencyKey,
+                );
+                show("Đã hoàn thành bước cuối và ghi kết quả nhiệm vụ.");
+                await load();
+                setProgressTarget(null);
+                setCompletionStepTarget(null);
+                return true;
+              } catch (error) {
+                show(getErrorMessage(error), "error");
+                await load();
+                return false;
+              }
+            }
+
             const saved = await recordProgress(progressTarget, values, idempotencyKey);
-            if (saved) setProgressTarget(null);
+            if (saved) {
+              setProgressTarget(null);
+              setCompletionStepTarget(null);
+            }
             return saved;
           }}
         />
@@ -1479,6 +1518,11 @@ function ProgressModal({
       ? item.status
       : "COMPLETED");
   const [status, setStatus] = useState<ProgressEntryStatus>(initialStatus);
+  const initialPercentage =
+    initialEntry?.completionPercentage ??
+    item.completionPercentage ??
+    (initialStatus === "COMPLETED" ? 100 : initialStatus === "SKIPPED" ? 0 : 50);
+  const [completionPercentage, setCompletionPercentage] = useState(initialPercentage);
   const [minutes, setMinutes] = useState(initialEntry?.actualMinutes ?? item.plannedMinutes ?? 30);
   const [result, setResult] = useState(initialEntry?.actualResult ?? "");
   const [difficulty, setDifficulty] = useState(initialEntry?.difficulty ?? 3);
@@ -1493,6 +1537,8 @@ function ProgressModal({
       await onSave(
         {
           status,
+          completionPercentage:
+            status === "COMPLETED" ? 100 : status === "SKIPPED" ? 0 : completionPercentage,
           actualMinutes: minutes,
           actualResult: result,
           difficulty,
@@ -1514,6 +1560,7 @@ function ProgressModal({
       closeDisabled={loading}
       confirmClose={Boolean(
         status !== initialStatus ||
+        (status === "PARTIALLY_COMPLETED" && completionPercentage !== initialPercentage) ||
         result.trim() !== (initialEntry?.actualResult ?? "") ||
         note.trim() !== (initialEntry?.note ?? "") ||
         minutes !== (initialEntry?.actualMinutes ?? item.plannedMinutes ?? 30) ||
@@ -1543,6 +1590,21 @@ function ProgressModal({
             ))}
           </div>
         </Field>
+        {status === "PARTIALLY_COMPLETED" && (
+          <Field label="Mức hoàn thành thực tế (%)">
+            <Input
+              type="number"
+              min={1}
+              max={99}
+              value={completionPercentage}
+              onChange={(event) => setCompletionPercentage(Number(event.target.value))}
+              required
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Nhập chính xác từ 1 đến 99%. Thời gian học thực tế được ghi riêng bên dưới.
+            </p>
+          </Field>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Phút thực tế">
             <Input
@@ -1590,7 +1652,14 @@ function ProgressModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Hủy
           </Button>
-          <Button type="submit" loading={loading}>
+          <Button
+            type="submit"
+            loading={loading}
+            disabled={
+              status === "PARTIALLY_COMPLETED" &&
+              (completionPercentage < 1 || completionPercentage > 99)
+            }
+          >
             Lưu tiến độ
           </Button>
         </div>

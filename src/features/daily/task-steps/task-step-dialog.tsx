@@ -33,7 +33,7 @@ interface TaskStepDialogProps {
   executable: boolean;
   onClose: () => void;
   onStepsChanged: (response: DailyPlanTaskStepsResponse) => void;
-  onRecordOutcome: (item: DailyPlanItem) => void;
+  onRecordOutcome: (item: DailyPlanItem, step: DailyPlanTaskStep) => void;
 }
 
 function isFinalOutcome(item: DailyPlanItem) {
@@ -229,6 +229,10 @@ export function TaskStepDialog({
           <ol className="space-y-3">
             {steps.map((step, index) => {
               const completionPending = pendingKey === `completion:${step.id}`;
+              const completesLastRequiredStep =
+                step.required &&
+                !step.completed &&
+                data.progress.completedRequiredCount + 1 === data.progress.requiredCount;
               const deletionWouldRemoveOnlyRequired =
                 step.required && data.progress.requiredCount === 1 && steps.length > 1;
 
@@ -247,7 +251,13 @@ export function TaskStepDialog({
                         <input
                           type="checkbox"
                           checked={step.completed}
-                          onChange={(event) => void setCompletion(step, event.target.checked)}
+                          onChange={(event) => {
+                            if (event.target.checked && completesLastRequiredStep) {
+                              onRecordOutcome(item, step);
+                              return;
+                            }
+                            void setCompletion(step, event.target.checked);
+                          }}
                           disabled={Boolean(pendingKey)}
                           aria-label={`${step.completed ? "Bỏ hoàn thành" : "Hoàn thành"}: ${step.title}`}
                           className="size-4 accent-emerald-600"
@@ -410,7 +420,14 @@ export function TaskStepDialog({
             <Button
               type="button"
               variant="success"
-              onClick={() => onRecordOutcome(item)}
+              onClick={() => {
+                const finalRequiredStep = [...steps]
+                  .reverse()
+                  .find((step) => step.required && step.completed);
+                if (finalRequiredStep) {
+                  onRecordOutcome(item, finalRequiredStep);
+                }
+              }}
               disabled={Boolean(pendingKey)}
             >
               <CheckCircle2 className="size-4" />

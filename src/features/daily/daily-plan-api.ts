@@ -2,6 +2,7 @@ import { ApiClientError, apiRequest } from "@/lib/api-client";
 import type {
   AiExecution,
   AvailableLearningUnit,
+  CompleteTaskStepAndRecordProgressResponse,
   DailyPlan,
   DailyPlanItem,
   DailyPlanSummary,
@@ -38,6 +39,7 @@ export interface DailyTaskInput {
 
 export interface ProgressInput {
   status: ProgressEntryStatus;
+  completionPercentage: number;
   actualMinutes: number;
   actualResult: string;
   difficulty?: number;
@@ -191,6 +193,24 @@ export const dailyPlanApi = {
       {
         method: "PUT",
         body: JSON.stringify({ completed, stateVersion: stateVersion ?? null }),
+      },
+    ),
+
+  completeTaskStepAndRecordProgress: (
+    planId: string,
+    versionId: string,
+    itemId: string,
+    stepId: string,
+    stateVersion: number | null | undefined,
+    outcome: ProgressInput,
+    idempotencyKey: string,
+  ) =>
+    apiRequest<CompleteTaskStepAndRecordProgressResponse>(
+      `/api/v1/daily-plans/${planId}/versions/${versionId}/items/${itemId}/steps/${stepId}/complete-with-outcome`,
+      {
+        method: "POST",
+        headers: idempotencyHeaders(idempotencyKey),
+        body: JSON.stringify({ stateVersion: stateVersion ?? null, outcome }),
       },
     ),
 
