@@ -20,12 +20,22 @@ export function formatBytes(value?: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`;
 }
 export function todayIso(timeZone = "Asia/Ho_Chi_Minh") {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  const zone = timeZone && timeZone.trim() ? timeZone.trim() : "Asia/Ho_Chi_Minh";
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  }
 }
 export function initials(name?: string) {
   return (name || "U")

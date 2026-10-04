@@ -1,17 +1,30 @@
-import { apiRequest } from "@/lib/api-client";
+import { ApiClientError, apiRequest } from "@/lib/api-client";
 import type {
   AiExecution,
   AvailableLearningUnit,
+  DailyPlan,
   DailyPlanItem,
+  DailyPlanSummary,
   DailyPlanTaskStepsResponse,
   DailyPlanTaskProgressHistory,
   DailyPlanVersion,
   DailyTaskCategory,
+  PageResponse,
   ProgressEntry,
   ProgressEntryStatus,
   TaskGuidanceOverview,
   TaskGuidanceRevision,
 } from "@/types/api";
+
+export interface GetDailyPlansParams {
+  status?: string;
+  roadmapId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  size?: number;
+  sort?: string;
+}
 
 export interface DailyTaskInput {
   title: string;
@@ -58,6 +71,35 @@ function idempotencyHeaders(idempotencyKey: string) {
 }
 
 export const dailyPlanApi = {
+  getDailyPlans: (params: GetDailyPlansParams = {}) => {
+    const searchParams = new URLSearchParams();
+    if (params.status) searchParams.set("status", params.status);
+    if (params.roadmapId) searchParams.set("roadmapId", params.roadmapId);
+    if (params.from) searchParams.set("from", params.from);
+    if (params.to) searchParams.set("to", params.to);
+    if (params.page !== undefined) searchParams.set("page", String(params.page));
+    if (params.size !== undefined) searchParams.set("size", String(params.size));
+    if (params.sort) searchParams.set("sort", params.sort);
+    const queryString = searchParams.toString();
+    return apiRequest<PageResponse<DailyPlanSummary>>(
+      `/api/v1/daily-plans${queryString ? `?${queryString}` : ""}`,
+    );
+  },
+
+  getTodayPlan: async (): Promise<DailyPlan | null> => {
+    try {
+      return await apiRequest<DailyPlan>("/api/v1/daily-plans/today");
+    } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        (error.details.status === 404 || error.details.code === "DAILY_PLAN_NOT_FOUND")
+      ) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
   getAvailableLearningUnits: (planId: string) =>
     apiRequest<AvailableLearningUnit[]>(`/api/v1/daily-plans/${planId}/available-learning-units`),
 

@@ -142,3 +142,66 @@ describe("dailyPlanApi task guidance", () => {
     expect(new Headers(request?.headers).get("Idempotency-Key")).toBe("guidance-request-2");
   });
 });
+
+describe("dailyPlanApi getTodayPlan", () => {
+  it("returns daily plan when endpoint responds 200", async () => {
+    const mockPlan = { id: "plan-today", planDate: "2026-10-02", status: "READY" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: mockPlan }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    const result = await dailyPlanApi.getTodayPlan();
+    expect(result).toEqual(mockPlan);
+    expect(fetch).toHaveBeenCalledWith("/api/v1/daily-plans/today", expect.anything());
+  });
+
+  it("returns null when endpoint responds 404 DAILY_PLAN_NOT_FOUND", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status: 404,
+            code: "DAILY_PLAN_NOT_FOUND",
+            message: "No daily plan found for today",
+          }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    const result = await dailyPlanApi.getTodayPlan();
+    expect(result).toBeNull();
+  });
+
+  it("throws error when endpoint responds with 500 error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            status: 500,
+            code: "INTERNAL_ERROR",
+            message: "Database failure",
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
+    );
+
+    await expect(dailyPlanApi.getTodayPlan()).rejects.toThrow("Database failure");
+  });
+});
+
