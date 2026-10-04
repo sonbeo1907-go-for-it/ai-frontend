@@ -2,15 +2,16 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { BarChart3, BookOpen, FileCode2, LogOut, ServerCog, ShieldCheck } from "lucide-react";
+import { Activity, BarChart3, BookOpen, FileCode2, LogOut, ServerCog, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/states";
 import { AiAnalyticsDashboard } from "@/features/admin/ai-analytics-dashboard";
 import { AiProviderDashboard } from "@/features/admin/ai-provider-dashboard";
 import { AiPromptDashboard } from "@/features/admin/ai-prompts";
+import { AiExecutionDashboard } from "@/features/admin/ai-executions";
 import { useAuth } from "@/features/auth/auth-context";
 
-type AdminTab = "providers" | "analytics" | "prompts";
+type AdminTab = "providers" | "analytics" | "prompts" | "executions";
 
 function AdminPageContent() {
   const router = useRouter();
@@ -19,7 +20,9 @@ function AdminPageContent() {
 
   const tabParam = searchParams.get("tab");
   const activeTab: AdminTab =
-    tabParam === "analytics" || tabParam === "prompts" ? tabParam : "providers";
+    tabParam === "analytics" || tabParam === "prompts" || tabParam === "executions"
+      ? tabParam
+      : "providers";
 
   useEffect(() => {
     if (status === "anonymous") router.replace("/login");
@@ -74,7 +77,7 @@ function AdminPageContent() {
               Quản trị hệ thống AI
             </h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Quản lý provider, credential, model, system prompts và giám sát hiệu năng, độ trễ, token tiêu thụ.
+              Quản lý provider, credential, model, system prompts, lịch sử thực thi và giám sát hiệu năng, độ trễ, token tiêu thụ.
             </p>
           </div>
 
@@ -115,6 +118,20 @@ function AdminPageContent() {
             <button
               type="button"
               role="tab"
+              aria-selected={activeTab === "executions"}
+              onClick={() => handleTabChange("executions")}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+                activeTab === "executions"
+                  ? "bg-slate-950 text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Activity className="size-4" />
+              Lịch sử AI Execution
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={activeTab === "analytics"}
               onClick={() => handleTabChange("analytics")}
               className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
@@ -133,6 +150,8 @@ function AdminPageContent() {
           <AiProviderDashboard />
         ) : activeTab === "prompts" ? (
           <AiPromptDashboard />
+        ) : activeTab === "executions" ? (
+          <AiExecutionDashboard />
         ) : (
           <AiAnalyticsDashboard />
         )}
