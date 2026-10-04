@@ -1,34 +1,70 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Globe2, UserRound } from "lucide-react";
+import { ArrowRight, Check, Globe2, Sparkles, UserRound } from "lucide-react";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/features/auth/auth-context";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { StudyDurationField } from "@/components/ui/study-duration-field";
+import { TimezonePicker } from "@/components/ui/timezone-picker";
 import { isValidStudyDuration } from "@/lib/study-duration";
+import { getBrowserDetectedTimeZone, isValidIanaTimeZone } from "@/lib/timezones";
 import type { ProfileResponse } from "@/types/api";
+
+const DRAFT_STORAGE_KEY = "profile_setup_wizard_draft";
 
 export function ProfileSetupForm() {
   const router = useRouter();
   const { profile, refreshProfile } = useAuth();
   const [step, setStep] = useState(0);
+
+  // Safe browser timezone detection
   const detected = useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Ho_Chi_Minh",
+    () => getBrowserDetectedTimeZone() ?? "Asia/Ho_Chi_Minh",
     [],
   );
+
   const [form, setForm] = useState<{
     displayName: string;
     timeZone: string;
     defaultDailyMinutes?: number;
-  }>({
-    displayName: profile?.profile?.displayName || "",
-    timeZone: profile?.profile?.timeZone || detected,
-    defaultDailyMinutes: profile?.profile?.defaultDailyMinutes || 60,
+  }>(() => {
+    // Check if there is saved draft in session storage (AC6)
+    if (typeof window !== "undefined") {
+      try {
+        const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+        if (raw) {
+          const draft = JSON.parse(raw);
+          return {
+            displayName: draft.displayName ?? profile?.profile?.displayName ?? "",
+            timeZone: draft.timeZone ?? profile?.profile?.timeZone ?? detected,
+            defaultDailyMinutes: draft.defaultDailyMinutes ?? profile?.profile?.defaultDailyMinutes ?? 60,
+          };
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+    }
+    return {
+      displayName: profile?.profile?.displayName || "",
+      timeZone: profile?.profile?.timeZone || detected,
+      defaultDailyMinutes: profile?.profile?.defaultDailyMinutes || 60,
+    };
   });
+
+  // Save draft whenever form updates (AC6)
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form));
+    } catch {
+      // Ignore storage errors
+    }
+  }, [form]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
   async function save() {
     setLoading(true);
     setError("");
@@ -37,6 +73,7 @@ export function ProfileSetupForm() {
         method: "PUT",
         body: JSON.stringify({ ...form, locale: "vi" }),
       });
+      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
       await refreshProfile();
       router.replace("/onboarding/roadmap");
     } catch (nextError) {
@@ -45,6 +82,12 @@ export function ProfileSetupForm() {
       setLoading(false);
     }
   }
+
+  const isStepValid =
+    form.displayName.trim().length > 0 &&
+    isValidIanaTimeZone(form.timeZone) &&
+    isValidStudyDuration(form.defaultDailyMinutes);
+
   return (
     <div className="w-full max-w-2xl animate-fade-up">
       <div className="mb-8 flex items-center justify-between">
@@ -96,17 +139,35 @@ export function ProfileSetupForm() {
           <div className="grid size-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-700">
             <Globe2 className="size-6" />
           </div>
-          <Field label="Múi giờ" hint={`Trình duyệt nhận diện: ${detected}`}>
-            <Input
+          <Field
+            label="Múi giờ làm việc & học tập"
+            hint="Chọn từ danh sách múi giờ chuẩn IANA. Múi giờ này quyết định việc tính toán ngày và nhắc lịch học."
+          >
+            <TimezonePicker
               value={form.timeZone}
-              onChange={(event) => setForm({ ...form, timeZone: event.target.value })}
+              onChange={(timeZone) => setForm({ ...form, timeZone })}
+              suggestedTimeZone={detected}
             />
           </Field>
+
+          {/* AC5: Scope isolation banner */}
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+            <div className="flex gap-2.5">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-indigo-600" />
+              <div className="text-xs text-indigo-950">
+                <p className="font-bold">Phân biệt phạm vi áp dụng (Scope)</p>
+                <p className="mt-1 leading-5 text-indigo-900/80">
+                  Thời lượng đặt tại đây là <strong>mặc định dự phòng cho toàn bộ tài khoản</strong>. Ở bước sau, mỗi Lộ trình học (Roadmap) có thể đặt cam kết học riêng phù hợp với từng mục tiêu mà không làm thay đổi giá trị mặc định này.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <StudyDurationField
             value={form.defaultDailyMinutes}
             onChange={(defaultDailyMinutes) => setForm({ ...form, defaultDailyMinutes })}
-            legend="Thời lượng học mặc định"
-            description="Đây là mức dự phòng cho tài khoản. Lộ trình hoặc kế hoạch của một ngày có thể dùng mức riêng."
+            legend="Thời lượng học mặc định (Tài khoản)"
+            description="Mức thời gian tối thiểu 15 phút, tối đa 8 giờ (480 phút) mỗi ngày."
           />
           {error && (
             <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>
@@ -119,7 +180,7 @@ export function ProfileSetupForm() {
               variant="success"
               size="lg"
               loading={loading}
-              disabled={!isValidStudyDuration(form.defaultDailyMinutes)}
+              disabled={!isStepValid}
               onClick={() => void save()}
             >
               <Check className="size-4" />
@@ -131,3 +192,4 @@ export function ProfileSetupForm() {
     </div>
   );
 }
+
