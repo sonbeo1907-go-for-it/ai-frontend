@@ -337,6 +337,14 @@ export function RoadmapDetailView() {
         pollingError={aiPollingError}
         onRefresh={refreshAiStatus}
         onDismiss={dismissAiFailure}
+        onRetry={() =>
+          openAiModal(
+            aiExecution?.operation === "REGENERATE" || (roadmap?.versions.length ?? 0) > 0
+              ? "regenerate"
+              : "generate",
+          )
+        }
+        isRetrying={aiSubmitting}
       />
       <WeakTopicsPanel roadmapId={id} roadmapVersionId={version?.id} />
       <div className="grid gap-6 xl:grid-cols-[17rem_1fr]">

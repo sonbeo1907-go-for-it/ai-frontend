@@ -306,7 +306,7 @@ class AiExecutionPoller {
       return;
     }
 
-    if (context.execution && isTerminalAiExecution(context.execution)) {
+    if (!isManualRefresh && context.execution && isTerminalAiExecution(context.execution)) {
       return;
     }
 

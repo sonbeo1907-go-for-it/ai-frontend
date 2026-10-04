@@ -96,6 +96,12 @@ export function TaskGuidancePanel({
         pollingError={guidance.pollingError}
         onRefresh={guidance.refresh}
         onDismiss={guidance.dismissFailure}
+        onRetry={() =>
+          void (guidance.execution?.operation === "REGENERATE"
+            ? guidance.regenerate()
+            : guidance.generate())
+        }
+        isRetrying={guidance.submitting}
       />
 
       {guidance.error && (

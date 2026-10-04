@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AiErrorAlert } from "@/components/ui/ai-error-alert";
 import type { AiExecution } from "@/types/api";
 
 type DailyPlanAiExecutionStatusProps = {
@@ -16,6 +17,8 @@ type DailyPlanAiExecutionStatusProps = {
   pollingError: string;
   onRefresh: () => void;
   onDismiss: () => void;
+  onRetry?: () => void;
+  isRetrying?: boolean;
 };
 
 export function DailyPlanAiExecutionStatus({
@@ -24,6 +27,8 @@ export function DailyPlanAiExecutionStatus({
   pollingError,
   onRefresh,
   onDismiss,
+  onRetry,
+  isRetrying = false,
 }: DailyPlanAiExecutionStatusProps) {
   if (!execution && !recovering && !pollingError) return null;
 
@@ -40,8 +45,8 @@ export function DailyPlanAiExecutionStatus({
         </div>
         {!recovering && (
           <div className="flex shrink-0 gap-1">
-            <Button variant="ghost" size="sm" onClick={onRefresh}>
-              <RefreshCw className="size-4" />
+            <Button variant="ghost" size="sm" onClick={onRetry ?? onRefresh} disabled={isRetrying}>
+              <RefreshCw className={`size-4 ${isRetrying ? "animate-spin" : ""}`} />
               Thử lại
             </Button>
             <Button variant="ghost" size="sm" onClick={onDismiss}>
@@ -56,8 +61,32 @@ export function DailyPlanAiExecutionStatus({
 
   const queued = execution.status === "QUEUED";
   const running = execution.status === "RUNNING";
-  const failed = execution.status === "FAILED";
+  const failed = execution.status === "FAILED" || execution.status === "TIMEOUT";
   const succeeded = execution.status === "SUCCEEDED";
+
+  if (failed) {
+    return (
+      <div className="relative">
+        <AiErrorAlert
+          execution={execution}
+          onRetry={onRetry ?? onRefresh}
+          retryLabel="Thử lại"
+          isRetrying={isRetrying}
+          onManualFallback={onDismiss}
+          manualFallbackLabel="Tiếp tục chỉnh sửa thủ công"
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDismiss}
+          className="absolute top-3 right-3 text-slate-400 hover:text-slate-600"
+          title="Đóng thông báo"
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -108,14 +137,12 @@ export function DailyPlanAiExecutionStatus({
               </Button>
             )}
           </div>
-          <p className={`mt-1 text-sm leading-6 ${failed ? "text-rose-700" : "text-slate-600"}`}>
-            {failed
-              ? execution.failureMessage || "Nhà cung cấp AI không thể hoàn tất yêu cầu."
-              : succeeded
-                ? "Đang tải phiên bản DRAFT vừa được tạo."
-                : running
-                  ? "Bạn có thể rời trang. Tiến trình tiếp tục chạy ở máy chủ."
-                  : "Yêu cầu đã được tiếp nhận và sẽ bắt đầu khi worker sẵn sàng."}
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            {succeeded
+              ? "Đang tải phiên bản DRAFT vừa được tạo."
+              : running
+                ? "Bạn có thể rời trang. Tiến trình tiếp tục chạy ở máy chủ."
+                : "Yêu cầu đã được tiếp nhận và sẽ bắt đầu khi worker sẵn sàng."}
           </p>
           {pollingError && !failed && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-amber-700">

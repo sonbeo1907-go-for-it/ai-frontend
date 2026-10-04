@@ -839,6 +839,12 @@ export function DailyPlanDetailView() {
             pollingError={aiPollingError}
             onRefresh={refreshAiStatus}
             onDismiss={dismissAiFailure}
+            onRetry={
+              aiExecution?.operation === "REGENERATE"
+                ? () => void regenerateWithAi()
+                : () => void generateWithAi()
+            }
+            isRetrying={aiSubmitting}
           />
 
           {/* Task List Header */}
