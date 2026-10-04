@@ -26,6 +26,7 @@ import { Modal } from "@/components/ui/modal";
 import { PageLoading } from "@/components/ui/states";
 import { useToast } from "@/components/providers/toast-provider";
 import { getErrorMessage } from "@/lib/api-client";
+import { getAiErrorTaxonomy } from "@/lib/ai-error-taxonomy";
 import {
   getDailyQuiz,
   getDailyEvaluation,
@@ -259,13 +260,17 @@ export function DailyMicroQuizModal({
           <Sparkles className="size-12 text-indigo-400" />
           <div className="max-w-md">
             <p className="font-bold text-slate-900">
-              {quizExecution.execution?.status === "FAILED"
+              {quizExecution.execution?.status === "FAILED" ||
+              quizExecution.execution?.status === "TIMEOUT"
                 ? "AI chưa thể tạo Micro-Quiz"
                 : "Chưa có Micro-Quiz cho phiên bản kế hoạch hiện tại"}
             </p>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              {quizExecution.execution?.failureMessage ||
-                quizExecution.pollingError ||
+              {quizExecution.execution &&
+              (quizExecution.execution.status === "FAILED" ||
+                quizExecution.execution.status === "TIMEOUT")
+                ? getAiErrorTaxonomy(quizExecution.execution.failureCode).description
+                : quizExecution.pollingError ||
                 (dailyPlanVersionId
                   ? "Bạn cần hoàn thành ít nhất một nhiệm vụ có liên kết với Roadmap trước khi tạo Quiz."
                   : "Hãy kích hoạt một phiên bản kế hoạch trước khi tạo Micro-Quiz.")}
@@ -277,7 +282,8 @@ export function DailyMicroQuizModal({
             disabled={!dailyPlanVersionId}
           >
             <RefreshCw className="size-4" />
-            {quizExecution.execution?.status === "FAILED"
+            {quizExecution.execution?.status === "FAILED" ||
+            quizExecution.execution?.status === "TIMEOUT"
               ? "Thử lại"
               : dailyPlanVersionId
                 ? "Tạo Micro-Quiz"

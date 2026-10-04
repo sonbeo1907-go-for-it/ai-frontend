@@ -22,6 +22,7 @@ function ResetForm() {
   const [error, setError] = useState("");
 
   const { isValid: isPasswordValid } = validatePasswordPolicy(password);
+  const confirmationMismatch = confirm.length > 0 && password !== confirm;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -90,7 +91,10 @@ function ResetForm() {
         />
       </Field>
       <PasswordPolicyHints password={password} />
-      <Field label="Xác nhận mật khẩu">
+      <Field
+        label="Xác nhận mật khẩu"
+        error={confirmationMismatch ? "Mật khẩu xác nhận không khớp." : undefined}
+      >
         <Input
           type="password"
           value={confirm}
@@ -101,7 +105,12 @@ function ResetForm() {
       {error && (
         <p className="rounded-xl bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p>
       )}
-      <Button className="w-full" size="lg" loading={loading} disabled={!isPasswordValid}>
+      <Button
+        className="w-full"
+        size="lg"
+        loading={loading}
+        disabled={!isPasswordValid || !confirm || confirmationMismatch}
+      >
         Đặt lại mật khẩu
       </Button>
     </form>

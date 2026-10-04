@@ -88,9 +88,7 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
               try {
                 recoveredExecution = await getLatestRoadmapAiExecution(roadmapId);
               } catch (latestError) {
-                if (latestError instanceof ApiClientError && latestError.details.status === 404) {
-                  setRecoveryError("Không thể khôi phục tiến trình.");
-                } else {
+                if (!(latestError instanceof ApiClientError && latestError.details.status === 404)) {
                   throw latestError;
                 }
               }
@@ -139,7 +137,7 @@ export function useRoadmapAiExecution(roadmapId: string, onSucceeded: Successful
     clearRememberedRoadmapAiExecution(roadmapId, execution.id);
     submissionIntentRef.current = null;
 
-    if (execution.status === "FAILED") return;
+    if (execution.status === "FAILED" || execution.status === "TIMEOUT") return;
     if (!execution.resultId) {
       window.setTimeout(
         () => setRecoveryError("AI đã hoàn tất nhưng không trả về phiên bản lộ trình."),

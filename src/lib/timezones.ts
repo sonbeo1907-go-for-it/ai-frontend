@@ -55,9 +55,15 @@ export const FALLBACK_IANA_TIMEZONES: readonly string[] = [
  */
 export function getSupportedTimeZones(): string[] {
   let zones: string[] = [];
-  if (typeof Intl !== "undefined" && typeof (Intl as any).supportedValuesOf === "function") {
+  const internationalization = Intl as typeof Intl & {
+    supportedValuesOf?: (key: "timeZone") => string[];
+  };
+  if (
+    typeof Intl !== "undefined" &&
+    typeof internationalization.supportedValuesOf === "function"
+  ) {
     try {
-      zones = [...((Intl as any).supportedValuesOf("timeZone") as string[])];
+      zones = [...internationalization.supportedValuesOf("timeZone")];
     } catch {
       // Fallback on error
     }

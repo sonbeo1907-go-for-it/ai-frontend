@@ -78,9 +78,6 @@ export function TimezonePicker({
   useEffect(() => {
     if (isOpen) {
       searchInputRef.current?.focus();
-      setHighlightedIndex(0);
-    } else {
-      setSearchQuery("");
     }
   }, [isOpen]);
 
@@ -96,6 +93,18 @@ export function TimezonePicker({
 
   function handleSelect(tz: string) {
     onChange(tz);
+    setSearchQuery("");
+    setIsOpen(false);
+  }
+
+  function openPicker() {
+    setSearchQuery("");
+    setHighlightedIndex(0);
+    setIsOpen(true);
+  }
+
+  function closePicker() {
+    setSearchQuery("");
     setIsOpen(false);
   }
 
@@ -105,7 +114,7 @@ export function TimezonePicker({
     if (!isOpen) {
       if (event.key === "Enter" || event.key === " " || event.key === "ArrowDown") {
         event.preventDefault();
-        setIsOpen(true);
+        openPicker();
       }
       return;
     }
@@ -127,15 +136,14 @@ export function TimezonePicker({
         break;
       case "Escape":
         event.preventDefault();
-        setIsOpen(false);
+        closePicker();
         break;
       case "Tab":
-        setIsOpen(false);
+        closePicker();
         break;
     }
   }
 
-  const isCurrentValueValid = isValidIanaTimeZone(value);
   const displayLabel = value
     ? formatTimeZoneOption(value)
     : placeholder;
@@ -153,7 +161,7 @@ export function TimezonePicker({
         aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid}
         disabled={disabled}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => (isOpen ? closePicker() : openPicker())}
         onKeyDown={handleKeyDown}
         className={cn(
           "focus-ring flex h-11 w-full items-center justify-between rounded-xl border bg-white px-3.5 text-left text-sm transition",

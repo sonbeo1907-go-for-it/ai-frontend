@@ -13,9 +13,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useToast } from "@/components/providers/toast-provider";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Field, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { PageLoading } from "@/components/ui/states";
 import { useAuth } from "@/features/auth/auth-context";
@@ -37,6 +37,7 @@ export default function TodayDailyPlanPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [selectedRoadmapId, setSelectedRoadmapId] = useState("");
 
   const userTimeZone = profile?.profile?.timeZone || "Asia/Ho_Chi_Minh";
   const todayDate = todayIso(userTimeZone);
@@ -58,6 +59,9 @@ export default function TodayDailyPlanPage() {
         "/api/v1/roadmaps?status=ACTIVE&page=0&size=100&sort=updatedAt,desc",
       ).catch(() => ({ content: [] as RoadmapSummary[] }));
       setRoadmaps(roadmapsRes.content);
+      setSelectedRoadmapId(
+        roadmapsRes.content.length === 1 ? roadmapsRes.content[0].id : "",
+      );
       setLoading(false);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -69,19 +73,24 @@ export default function TodayDailyPlanPage() {
   }, [router]);
 
   useEffect(() => {
-    void checkTodayPlan();
+    const timerId = window.setTimeout(() => void checkTodayPlan(), 0);
+    return () => window.clearTimeout(timerId);
   }, [checkTodayPlan]);
 
   async function handleAiGenerateConfirm() {
+    if (!selectedRoadmapId) {
+      show("Vui lòng chọn một lộ trình đang hoạt động trước khi tạo bằng AI.", "error");
+      return;
+    }
+
     setAiGenerating(true);
     try {
-      const activeRoadmap = roadmaps[0];
       // 1. Create daily plan for today (business rule: requires user confirmation)
       const createdPlan = await apiRequest<DailyPlan>("/api/v1/daily-plans", {
         method: "POST",
         body: JSON.stringify({
           planDate: todayDate,
-          roadmapId: activeRoadmap?.id || null,
+          roadmapId: selectedRoadmapId,
         }),
       });
 
@@ -201,6 +210,12 @@ export default function TodayDailyPlanPage() {
 
             <Button
               onClick={() => setAiConfirmOpen(true)}
+              disabled={roadmaps.length === 0}
+              title={
+                roadmaps.length === 0
+                  ? "Bạn cần kích hoạt một lộ trình trước khi tạo kế hoạch bằng AI."
+                  : undefined
+              }
               className="w-full sm:w-auto h-11 px-5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 border-none shadow-sm"
             >
               <Sparkles className="size-4" />
@@ -243,8 +258,25 @@ export default function TodayDailyPlanPage() {
 
             {roadmaps.length === 0 && (
               <div className="rounded-xl bg-amber-50 p-3 text-amber-800 border border-amber-200">
-                ⚠ Bạn chưa có lộ trình nào ở trạng thái ACTIVE. Kế hoạch ngày vẫn sẽ được tạo và bạn có thể thêm nhiệm vụ sau đó.
+                Bạn chưa có lộ trình ACTIVE. Hãy tạo kế hoạch thủ công hoặc kích hoạt một lộ trình trước khi dùng AI.
               </div>
+            )}
+
+            {roadmaps.length > 0 && (
+              <Field label="Lộ trình dùng để tạo kế hoạch">
+                <Select
+                  value={selectedRoadmapId}
+                  onChange={(event) => setSelectedRoadmapId(event.target.value)}
+                  disabled={aiGenerating}
+                >
+                  {roadmaps.length > 1 && <option value="">Chọn lộ trình</option>}
+                  {roadmaps.map((roadmap) => (
+                    <option key={roadmap.id} value={roadmap.id}>
+                      {roadmap.title}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
             )}
 
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
@@ -258,6 +290,7 @@ export default function TodayDailyPlanPage() {
               <Button
                 variant="primary"
                 loading={aiGenerating}
+                disabled={!selectedRoadmapId}
                 onClick={() => void handleAiGenerateConfirm()}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white"
               >

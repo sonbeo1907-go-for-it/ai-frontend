@@ -83,7 +83,7 @@ export function useDailyQuizAiExecution(
     if (handledExecutionsRef.current.has(execution.id)) return;
     handledExecutionsRef.current.add(execution.id);
 
-    if (execution.status === "FAILED") return;
+    if (execution.status === "FAILED" || execution.status === "TIMEOUT") return;
     if (!execution.resultId || execution.resultType !== "QUIZ") {
       window.setTimeout(() => {
         setRecoveryError("AI đã hoàn tất nhưng không trả về Micro-Quiz hợp lệ.");

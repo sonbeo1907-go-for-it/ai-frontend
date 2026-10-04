@@ -250,12 +250,7 @@ class AiExecutionPoller {
 
   public refresh(executionId: string) {
     if (!executionId) return;
-    const context = this.activePollers.get(executionId);
-    if (!context) {
-      // Create context and fetch
-      void this.fetchExecution(executionId, true);
-      return;
-    }
+    const context = this.getOrCreateContext(executionId);
 
     // AC7: Manual refresh lock - if in flight, do not send duplicate request
     if (context.abortController !== null) {

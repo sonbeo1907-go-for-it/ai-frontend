@@ -22,6 +22,7 @@ export default function RegisterPage() {
   const [done, setDone] = useState(false);
 
   const { isValid: isPasswordValid } = validatePasswordPolicy(form.password);
+  const confirmationMismatch = form.confirm.length > 0 && form.password !== form.confirm;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -112,7 +113,10 @@ export default function RegisterPage() {
           />
         </Field>
         <PasswordPolicyHints password={form.password} />
-        <Field label="Xác nhận mật khẩu">
+        <Field
+          label="Xác nhận mật khẩu"
+          error={confirmationMismatch ? "Mật khẩu xác nhận không khớp." : undefined}
+        >
           <Input
             type="password"
             autoComplete="new-password"
@@ -131,7 +135,7 @@ export default function RegisterPage() {
           size="lg"
           className="w-full"
           loading={loading}
-          disabled={!isPasswordValid}
+          disabled={!isPasswordValid || !form.confirm || confirmationMismatch}
         >
           Tạo tài khoản
         </Button>

@@ -178,7 +178,10 @@ export function useTaskGuidance({ planId, versionId, itemId, contextKey }: UseTa
     if (!effectiveExecution || isActiveTaskGuidanceExecution(effectiveExecution)) return;
     if (handledExecutionsRef.current.has(effectiveExecution.id)) return;
 
-    if (effectiveExecution.status === "FAILED") {
+    if (
+      effectiveExecution.status === "FAILED" ||
+      effectiveExecution.status === "TIMEOUT"
+    ) {
       handledExecutionsRef.current.add(effectiveExecution.id);
       clearRemembered(effectiveExecution.id);
       submissionIntentRef.current = null;

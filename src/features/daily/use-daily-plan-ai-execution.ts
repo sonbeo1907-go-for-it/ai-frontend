@@ -90,9 +90,7 @@ export function useDailyPlanAiExecution(
               try {
                 recovered = await getLatestDailyPlanAiExecution(dailyPlanId);
               } catch (targetError) {
-                if (targetError instanceof ApiClientError && targetError.details.status === 404) {
-                  setRecoveryError("Không thể khôi phục tiến trình.");
-                } else {
+                if (!(targetError instanceof ApiClientError && targetError.details.status === 404)) {
                   throw targetError;
                 }
               }
@@ -141,7 +139,7 @@ export function useDailyPlanAiExecution(
     clearRememberedDailyPlanAiExecution(dailyPlanId, execution.id);
     submissionIntentRef.current = null;
 
-    if (execution.status === "FAILED") return;
+    if (execution.status === "FAILED" || execution.status === "TIMEOUT") return;
     if (!execution.resultId || execution.resultType !== "DAILY_PLAN_VERSION") {
       window.setTimeout(
         () => setRecoveryError("AI đã hoàn tất nhưng không trả về phiên bản kế hoạch ngày."),

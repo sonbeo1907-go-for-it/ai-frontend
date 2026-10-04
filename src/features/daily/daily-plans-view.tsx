@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -42,6 +42,7 @@ export function DailyPlansView() {
   const [roadmaps, setRoadmaps] = useState<RoadmapSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const requestSequence = useRef(0);
 
   const userTimeZone = profile?.profile?.timeZone || "Asia/Ho_Chi_Minh";
   const todayDateString = todayIso(userTimeZone);
@@ -108,6 +109,7 @@ export function DailyPlansView() {
   }, [todayDateString, updateFilters]);
 
   const load = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     if (dateRangeError) {
       setLoading(false);
       return;
@@ -130,14 +132,18 @@ export function DailyPlansView() {
             )
           : Promise.resolve(null),
       ]);
+      if (requestId !== requestSequence.current) return;
       setPage(nextPlans);
       if (nextRoadmaps) {
         setRoadmaps(nextRoadmaps.content);
       }
     } catch (error) {
+      if (requestId !== requestSequence.current) return;
       show(getErrorMessage(error), "error");
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) {
+        setLoading(false);
+      }
     }
   }, [dateRangeError, from, to, status, roadmapId, pageParam, sort, roadmaps.length, show]);
 

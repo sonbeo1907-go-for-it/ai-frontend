@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Globe2, KeyRound, Save, ShieldCheck, UserRound } from "lucide-react";
+import { KeyRound, Save, ShieldCheck, UserRound } from "lucide-react";
 import { useAuth } from "@/features/auth/auth-context";
 import { useToast } from "@/components/providers/toast-provider";
 import { Card } from "@/components/ui/card";
@@ -41,6 +41,9 @@ export default function ProfilePage() {
   const [changing, setChanging] = useState(false);
 
   const { isValid: isNewPasswordValid } = validatePasswordPolicy(password.newPassword);
+  const confirmationMismatch =
+    password.confirmPassword.length > 0 &&
+    password.newPassword !== password.confirmPassword;
 
   async function saveProfile(event: React.FormEvent) {
     event.preventDefault();
@@ -177,7 +180,10 @@ export default function ProfilePage() {
               />
             </Field>
             <PasswordPolicyHints password={password.newPassword} />
-            <Field label="Xác nhận mật khẩu">
+            <Field
+              label="Xác nhận mật khẩu"
+              error={confirmationMismatch ? "Mật khẩu xác nhận không khớp." : undefined}
+            >
               <Input
                 type="password"
                 value={password.confirmPassword}
@@ -192,7 +198,10 @@ export default function ProfilePage() {
               type="submit"
               loading={changing}
               disabled={
-                !password.currentPassword || !isNewPasswordValid || !password.confirmPassword
+                !password.currentPassword ||
+                !isNewPasswordValid ||
+                !password.confirmPassword ||
+                confirmationMismatch
               }
             >
               Cập nhật mật khẩu

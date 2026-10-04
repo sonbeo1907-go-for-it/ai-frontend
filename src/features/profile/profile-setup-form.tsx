@@ -12,7 +12,7 @@ import { isValidStudyDuration } from "@/lib/study-duration";
 import { getBrowserDetectedTimeZone, isValidIanaTimeZone } from "@/lib/timezones";
 import type { ProfileResponse } from "@/types/api";
 
-const DRAFT_STORAGE_KEY = "profile_setup_wizard_draft";
+const DRAFT_STORAGE_KEY_PREFIX = "profile_setup_wizard_draft";
 
 export function ProfileSetupForm() {
   const router = useRouter();
@@ -20,10 +20,10 @@ export function ProfileSetupForm() {
   const [step, setStep] = useState(0);
 
   // Safe browser timezone detection
-  const detected = useMemo(
-    () => getBrowserDetectedTimeZone() ?? "Asia/Ho_Chi_Minh",
-    [],
-  );
+  const detected = useMemo(() => getBrowserDetectedTimeZone() ?? "", []);
+  const draftStorageKey = profile?.id
+    ? `${DRAFT_STORAGE_KEY_PREFIX}:${profile.id}`
+    : null;
 
   const [form, setForm] = useState<{
     displayName: string;
@@ -31,9 +31,9 @@ export function ProfileSetupForm() {
     defaultDailyMinutes?: number;
   }>(() => {
     // Check if there is saved draft in session storage (AC6)
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && profile?.id) {
       try {
-        const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+        const raw = sessionStorage.getItem(`${DRAFT_STORAGE_KEY_PREFIX}:${profile.id}`);
         if (raw) {
           const draft = JSON.parse(raw);
           return {
@@ -53,14 +53,34 @@ export function ProfileSetupForm() {
     };
   });
 
+  useEffect(() => {
+    if (!draftStorageKey) return;
+    try {
+      const raw = sessionStorage.getItem(draftStorageKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      const timerId = window.setTimeout(() => {
+        setForm((current) => ({
+          displayName: draft.displayName ?? current.displayName,
+          timeZone: draft.timeZone ?? current.timeZone,
+          defaultDailyMinutes: draft.defaultDailyMinutes ?? current.defaultDailyMinutes,
+        }));
+      }, 0);
+      return () => window.clearTimeout(timerId);
+    } catch {
+      // Ignore malformed or unavailable session storage.
+    }
+  }, [draftStorageKey]);
+
   // Save draft whenever form updates (AC6)
   useEffect(() => {
+    if (!draftStorageKey) return;
     try {
-      sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form));
+      sessionStorage.setItem(draftStorageKey, JSON.stringify(form));
     } catch {
       // Ignore storage errors
     }
-  }, [form]);
+  }, [draftStorageKey, form]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -73,7 +93,9 @@ export function ProfileSetupForm() {
         method: "PUT",
         body: JSON.stringify({ ...form, locale: "vi" }),
       });
-      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      if (draftStorageKey) {
+        sessionStorage.removeItem(draftStorageKey);
+      }
       await refreshProfile();
       router.replace("/onboarding/roadmap");
     } catch (nextError) {
