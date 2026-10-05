@@ -89,6 +89,17 @@ describe("dailyPlanApi task steps", () => {
       }),
     );
   });
+
+  it("starts a task without sending a progress payload", async () => {
+    await dailyPlanApi.startTask("plan-1", "item-1");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/daily-plans/plan-1/items/item-1/start",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const request = vi.mocked(fetch).mock.calls[0][1];
+    expect(request?.body).toBeUndefined();
+  });
 });
 
 describe("dailyPlanApi task guidance", () => {
@@ -236,4 +247,3 @@ describe("dailyPlanApi getTodayPlan", () => {
     await expect(dailyPlanApi.getTodayPlan()).rejects.toThrow("Database failure");
   });
 });
-

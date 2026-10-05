@@ -283,6 +283,11 @@ export const dailyPlanApi = {
       body: JSON.stringify(input),
     }),
 
+  startTask: (planId: string, itemId: string) =>
+    apiRequest<DailyPlanItem>(`/api/v1/daily-plans/${planId}/items/${itemId}/start`, {
+      method: "POST",
+    }),
+
   getProgressHistory: (planId: string, itemId: string) =>
     apiRequest<ProgressEntry[]>(`/api/v1/daily-plans/${planId}/items/${itemId}/progress`),
 

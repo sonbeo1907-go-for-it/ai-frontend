@@ -29,7 +29,7 @@ import { Modal } from "@/components/ui/modal";
 import { StudyDurationField } from "@/components/ui/study-duration-field";
 import { PageLoading, ProgressBar } from "@/components/ui/states";
 import { useAuth } from "@/features/auth/auth-context";
-import { apiRequest, getErrorMessage } from "@/lib/api-client";
+import { apiRequest, getErrorMessage, isApiErrorCode } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatDateOnly, todayIso } from "@/lib/format";
 import { dailyPlanStatusLabels, versionStatusLabels } from "@/lib/display-labels";
@@ -50,6 +50,7 @@ import type {
 import { DailyMicroQuizModal } from "@/features/evaluations/daily-micro-quiz-modal";
 import { getDailyEvaluation } from "@/features/evaluations/evaluation-api";
 import { DailyPlanAiExecutionStatus } from "./daily-plan-ai-execution-status";
+import { DailyPlanKanbanBoard } from "./kanban/daily-plan-kanban-board";
 import { PomodoroModal } from "./pomodoro-modal";
 import { useDailyPlanAiExecution } from "./use-daily-plan-ai-execution";
 import { dailyPlanApi, type ProgressInput } from "./daily-plan-api";
@@ -68,6 +69,11 @@ interface PrimaryActionConfig {
   tooltip?: string;
 }
 
+function incompleteRequiredStepCount(item: DailyPlanItem): number {
+  if (!item.stepProgress) return 0;
+  return Math.max(0, item.stepProgress.requiredCount - item.stepProgress.completedRequiredCount);
+}
+
 export function DailyPlanDetailView() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -82,8 +88,11 @@ export function DailyPlanDetailView() {
   const [aiConfirmOpen, setAiConfirmOpen] = useState(false);
   const [activationConfirmOpen, setActivationConfirmOpen] = useState(false);
   const [progressTarget, setProgressTarget] = useState<DailyPlanItem | null>(null);
-  const [completionStepTarget, setCompletionStepTarget] =
-    useState<DailyPlanTaskStep | null>(null);
+  const [progressInitialStatus, setProgressInitialStatus] = useState<ProgressEntryStatus | null>(
+    null,
+  );
+  const [startingTaskId, setStartingTaskId] = useState<string | null>(null);
+  const [completionStepTarget, setCompletionStepTarget] = useState<DailyPlanTaskStep | null>(null);
   const [historyTarget, setHistoryTarget] = useState<DailyPlanItem | null>(null);
   const [historyEntries, setHistoryEntries] = useState<ProgressEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -301,9 +310,62 @@ export function DailyPlanDetailView() {
       await load();
       return true;
     } catch (error) {
+      if (isApiErrorCode(error, "TASK_REQUIRED_STEPS_INCOMPLETE")) {
+        show("Hãy hoàn thành mọi bước bắt buộc trước khi hoàn thành nhiệm vụ.", "error");
+        setProgressTarget(null);
+        setCompletionStepTarget(null);
+        setProgressInitialStatus(null);
+        await load();
+        setStepTargetId(item.id);
+        return false;
+      }
       show(getErrorMessage(error), "error");
       return false;
     }
+  }
+
+  async function startTask(item: DailyPlanItem) {
+    if (startingTaskId) return;
+    setStartingTaskId(item.id);
+    try {
+      const updated = await dailyPlanApi.startTask(id, item.id);
+      setVersions((current) =>
+        current.map((candidateVersion) =>
+          candidateVersion.id !== updated.versionId
+            ? candidateVersion
+            : {
+                ...candidateVersion,
+                items: candidateVersion.items.map((candidateItem) =>
+                  candidateItem.id === updated.id ? updated : candidateItem,
+                ),
+              },
+        ),
+      );
+      setPlan((current) =>
+        current && current.status === "READY" ? { ...current, status: "IN_PROGRESS" } : current,
+      );
+      show("Nhiệm vụ đã chuyển sang Đang học.");
+    } catch (error) {
+      show(getErrorMessage(error), "error");
+      await load();
+    } finally {
+      setStartingTaskId(null);
+    }
+  }
+
+  function requestOutcome(item: DailyPlanItem, status?: ProgressEntryStatus) {
+    const remainingRequiredSteps = incompleteRequiredStepCount(item);
+    if (status === "COMPLETED" && remainingRequiredSteps > 0) {
+      show(
+        `Còn ${remainingRequiredSteps} bước bắt buộc. Hoàn thành checklist trước khi hoàn thành nhiệm vụ.`,
+        "error",
+      );
+      setStepTargetId(item.id);
+      return;
+    }
+    setCompletionStepTarget(null);
+    setProgressInitialStatus(status ?? null);
+    setProgressTarget(item);
   }
 
   async function correctProgress(
@@ -656,6 +718,12 @@ export function DailyPlanDetailView() {
                     Version {version.versionNumber} ({versionStatusLabels[version.status]})
                   </Badge>
                 )}
+                {evaluation?.quizScore != null && (
+                  <Badge tone={evaluation.quizPassed ? "emerald" : "rose"}>
+                    Micro-Quiz {evaluation.quizScore}% ·{" "}
+                    {evaluation.quizPassed ? "Đạt" : "Chưa đạt"}
+                  </Badge>
+                )}
                 <Badge>{plan.timeZoneSnapshot}</Badge>
               </div>
               <h2 className="mt-2.5 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
@@ -669,12 +737,32 @@ export function DailyPlanDetailView() {
               <p className="mt-1.5 text-xs font-medium text-slate-500 sm:text-sm">
                 Quỹ thời gian {version?.availableMinutes ?? plan.availableMinutes} phút · Dự kiến{" "}
                 {version?.totalPlannedMinutes ?? 0} phút · Đã hoàn thành{" "}
-                {items.filter((i) => i.status === "COMPLETED").length}/{items.length} nhiệm vụ ({completion}%)
+                {items.filter((i) => i.status === "COMPLETED").length}/{items.length} nhiệm vụ (
+                {completion}%)
               </p>
             </div>
 
             {/* Toolbar - AC1: Exactly one primary action highlighted + AC2: Progressive disclosure */}
             <div className="flex flex-wrap items-center gap-2.5">
+              <label className="focus-within:ring-2 focus-within:ring-indigo-200 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-xs">
+                <span className="sr-only">Chọn phiên bản kế hoạch</span>
+                <select
+                  aria-label="Chọn phiên bản kế hoạch"
+                  value={selectedId ?? version?.id ?? ""}
+                  onChange={(event) => {
+                    setStepTargetId(null);
+                    setSelectedId(event.target.value);
+                  }}
+                  className="min-w-36 bg-transparent font-bold text-slate-900 outline-none"
+                >
+                  {versions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      Version {item.versionNumber} · {versionStatusLabels[item.status]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               {/* Secondary quick action when in DRAFT: Add Task */}
               {editable && items.length > 0 && (
                 <Button
@@ -753,9 +841,9 @@ export function DailyPlanDetailView() {
       </Card>
 
       {/* AC3: Task-First Layout */}
-      <div className="grid gap-6 xl:grid-cols-[1fr_18rem]">
+      <div className="space-y-4">
         {/* Main Task Area (Order 1: displayed first on mobile & desktop) */}
-        <div className="order-1 space-y-4">
+        <div className="space-y-4">
           {/* AC4: Clear state banner & explanations */}
           {draftVersionSelected && (
             <div className="flex items-center gap-2.5 rounded-xl border border-indigo-200 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900">
@@ -832,7 +920,7 @@ export function DailyPlanDetailView() {
             <FocusTaskCard
               item={nextTask}
               onPomodoro={() => setPomodoro({ open: true, taskId: nextTask.id })}
-              onProgress={() => setProgressTarget(nextTask)}
+              onProgress={() => requestOutcome(nextTask)}
               onOpenSteps={() => setStepTargetId(nextTask.id)}
             />
           )}
@@ -852,14 +940,17 @@ export function DailyPlanDetailView() {
             isRetrying={aiSubmitting}
           />
 
-          {/* Task List Header */}
+          {/* Task execution/editor header */}
           <div className="flex items-center justify-between pt-2">
             <div>
               <h3 className="text-base font-black tracking-tight text-slate-900">
-                Danh sách nhiệm vụ ({items.length})
+                {version?.status === "ACTIVE" ? "Bảng thực hiện hôm nay" : "Danh sách nhiệm vụ"} (
+                {items.length})
               </h3>
               <p className="text-xs text-slate-500">
-                {items.filter((i) => i.status === "COMPLETED").length}/{items.length} nhiệm vụ hoàn thành
+                {version?.status === "ACTIVE"
+                  ? "Kéo thẻ để bắt đầu hoặc ghi nhận kết quả; các nút trên thẻ hỗ trợ bàn phím và thiết bị cảm ứng."
+                  : `${items.filter((i) => i.status === "COMPLETED").length}/${items.length} nhiệm vụ hoàn thành`}
               </p>
             </div>
             {editable && (
@@ -870,7 +961,7 @@ export function DailyPlanDetailView() {
             )}
           </div>
 
-          {/* Tasks List */}
+          {/* ACTIVE versions use Kanban; DRAFT and historical versions keep the established list. */}
           {items.length === 0 ? (
             <Card className="grid min-h-72 place-items-center border-dashed p-8 text-center">
               <div>
@@ -887,6 +978,17 @@ export function DailyPlanDetailView() {
                 )}
               </div>
             </Card>
+          ) : version?.status === "ACTIVE" ? (
+            <DailyPlanKanbanBoard
+              items={items}
+              executable={Boolean(executable)}
+              pendingItemId={startingTaskId}
+              onStart={(item) => void startTask(item)}
+              onRequestOutcome={requestOutcome}
+              onOpenSteps={(item) => setStepTargetId(item.id)}
+              onHistory={(item) => void openProgressHistory(item)}
+              onPomodoro={(item) => setPomodoro({ open: true, taskId: item.id })}
+            />
           ) : (
             <div className="space-y-3">
               {items.map((item) => (
@@ -897,10 +999,7 @@ export function DailyPlanDetailView() {
                   executable={Boolean(executable)}
                   onEdit={() => void openEditTask(item)}
                   onDelete={() => setDeleteTarget(item)}
-                  onProgress={() => {
-                    setCompletionStepTarget(null);
-                    setProgressTarget(item);
-                  }}
+                  onProgress={() => requestOutcome(item)}
                   onHistory={() => void openProgressHistory(item)}
                   onPomodoro={() => setPomodoro({ open: true, taskId: item.id })}
                   onOpenSteps={() => setStepTargetId(item.id)}
@@ -908,100 +1007,6 @@ export function DailyPlanDetailView() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Right Section: Version Selector & Summary (Order 2: secondary on mobile) */}
-        <div className="order-2 space-y-4">
-          <Card className="p-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                Phiên bản ({versions.length})
-              </h3>
-              {!draftVersionSelected && !aiBlockingMutations && (
-                <button
-                  type="button"
-                  onClick={() => void createDraft()}
-                  disabled={busy}
-                  className="focus-ring text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
-                  title="Tạo bản DRAFT mới"
-                >
-                  + Bản nháp
-                </button>
-              )}
-            </div>
-            <div className="mt-3 grid gap-2">
-              {versions.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setStepTargetId(null);
-                    setSelectedId(item.id);
-                  }}
-                  className={`focus-ring rounded-xl border p-3 text-left transition ${
-                    selectedId === item.id
-                      ? "border-indigo-300 bg-indigo-50/80 shadow-xs"
-                      : "border-transparent hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <strong className="text-xs font-bold text-slate-900">
-                      Version {item.versionNumber}
-                    </strong>
-                    <Badge
-                      tone={
-                        item.status === "ACTIVE"
-                          ? "emerald"
-                          : item.status === "DRAFT"
-                            ? "indigo"
-                            : "slate"
-                      }
-                    >
-                      {versionStatusLabels[item.status]}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-400">
-                    {item.items.length} nhiệm vụ · {item.totalPlannedMinutes} phút
-                  </p>
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Quick Metrics Card */}
-          <Card className="p-4 space-y-3">
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-              Tổng quan ngày
-            </h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between text-slate-600">
-                <span>Quỹ thời gian</span>
-                <span className="font-bold">{version?.availableMinutes ?? plan.availableMinutes} phút</span>
-              </div>
-              <div className="flex items-center justify-between text-slate-600">
-                <span>Dự kiến học</span>
-                <span className="font-bold">{version?.totalPlannedMinutes ?? 0} phút</span>
-              </div>
-              {evaluation?.quizScore != null && (
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <span className="text-slate-600">Micro-Quiz</span>
-                  <Badge tone={evaluation.quizPassed ? "emerald" : "rose"}>
-                    {evaluation.quizScore}% {evaluation.quizPassed ? "Đạt" : "Chưa đạt"}
-                  </Badge>
-                </div>
-              )}
-            </div>
-            {editable && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full mt-2"
-                onClick={openBudgetEditor}
-              >
-                <Timer className="size-3.5" />
-                Chỉnh quỹ thời gian
-              </Button>
-            )}
-          </Card>
         </div>
       </div>
       {version && addOpen && (
@@ -1079,6 +1084,7 @@ export function DailyPlanDetailView() {
           onRecordOutcome={(item, step) => {
             setStepTargetId(null);
             setCompletionStepTarget(step);
+            setProgressInitialStatus(null);
             setProgressTarget(item);
           }}
         />
@@ -1087,10 +1093,23 @@ export function DailyPlanDetailView() {
         <ProgressModal
           open
           item={progressTarget}
+          initialStatus={progressInitialStatus ?? undefined}
+          pendingRequiredStepCompletion={Boolean(
+            completionStepTarget?.required &&
+            !completionStepTarget.completed &&
+            incompleteRequiredStepCount(progressTarget) === 1,
+          )}
           title={completionStepTarget ? "Hoàn thành bước và nhiệm vụ" : undefined}
           onClose={() => {
             setProgressTarget(null);
             setCompletionStepTarget(null);
+            setProgressInitialStatus(null);
+          }}
+          onOpenSteps={() => {
+            setProgressTarget(null);
+            setCompletionStepTarget(null);
+            setProgressInitialStatus(null);
+            setStepTargetId(progressTarget.id);
           }}
           onSave={async (values, idempotencyKey) => {
             if (completionStepTarget && version) {
@@ -1108,6 +1127,7 @@ export function DailyPlanDetailView() {
                 await load();
                 setProgressTarget(null);
                 setCompletionStepTarget(null);
+                setProgressInitialStatus(null);
                 return true;
               } catch (error) {
                 show(getErrorMessage(error), "error");
@@ -1120,6 +1140,7 @@ export function DailyPlanDetailView() {
             if (saved) {
               setProgressTarget(null);
               setCompletionStepTarget(null);
+              setProgressInitialStatus(null);
             }
             return saved;
           }}
@@ -1501,22 +1522,36 @@ function ProgressModal({
   open,
   item,
   initialEntry,
+  initialStatus: requestedInitialStatus,
+  pendingRequiredStepCompletion = false,
   title = "Ghi nhận kết quả",
   onClose,
+  onOpenSteps,
   onSave,
 }: {
   open: boolean;
   item: DailyPlanItem;
   initialEntry?: ProgressEntry;
+  initialStatus?: ProgressEntryStatus;
+  pendingRequiredStepCompletion?: boolean;
   title?: string;
   onClose: () => void;
+  onOpenSteps?: () => void;
   onSave: (values: ProgressInput, idempotencyKey: string) => Promise<boolean>;
 }) {
+  const remainingRequiredSteps = incompleteRequiredStepCount(item);
+  const completionBlocked =
+    remainingRequiredSteps > 0 &&
+    !pendingRequiredStepCompletion &&
+    initialEntry?.status !== "COMPLETED";
   const initialStatus: ProgressEntryStatus =
     initialEntry?.status ??
+    requestedInitialStatus ??
     (item.status === "PARTIALLY_COMPLETED" || item.status === "SKIPPED"
       ? item.status
-      : "COMPLETED");
+      : completionBlocked
+        ? "PARTIALLY_COMPLETED"
+        : "COMPLETED");
   const [status, setStatus] = useState<ProgressEntryStatus>(initialStatus);
   const initialPercentage =
     initialEntry?.completionPercentage ??
@@ -1532,6 +1567,7 @@ function ProgressModal({
   const [loading, setLoading] = useState(false);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (status === "COMPLETED" && completionBlocked) return;
     setLoading(true);
     try {
       await onSave(
@@ -1582,14 +1618,34 @@ function ProgressModal({
                 type="button"
                 aria-pressed={status === option.value}
                 key={option.value}
+                disabled={option.value === "COMPLETED" && completionBlocked}
                 onClick={() => setStatus(option.value)}
-                className={`focus-ring rounded-xl border px-2 py-3 text-xs font-bold ${status === option.value ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}`}
+                title={
+                  option.value === "COMPLETED" && completionBlocked
+                    ? "Hoàn thành mọi bước bắt buộc trước"
+                    : undefined
+                }
+                className={`focus-ring rounded-xl border px-2 py-3 text-xs font-bold disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400 ${status === option.value ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}`}
               >
                 {option.label}
               </button>
             ))}
           </div>
         </Field>
+        {completionBlocked && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p>
+              Còn <strong>{remainingRequiredSteps}</strong> bước bắt buộc chưa hoàn thành. Bạn vẫn
+              có thể ghi nhận một phần hoặc bỏ qua nhiệm vụ.
+            </p>
+            {onOpenSteps && (
+              <Button type="button" size="sm" variant="secondary" onClick={onOpenSteps}>
+                <ListChecks className="size-4" />
+                Mở checklist
+              </Button>
+            )}
+          </div>
+        )}
         {status === "PARTIALLY_COMPLETED" && (
           <Field label="Mức hoàn thành thực tế (%)">
             <Input
@@ -1656,8 +1712,9 @@ function ProgressModal({
             type="submit"
             loading={loading}
             disabled={
-              status === "PARTIALLY_COMPLETED" &&
-              (completionPercentage < 1 || completionPercentage > 99)
+              (status === "COMPLETED" && completionBlocked) ||
+              (status === "PARTIALLY_COMPLETED" &&
+                (completionPercentage < 1 || completionPercentage > 99))
             }
           >
             Lưu tiến độ
@@ -1734,12 +1791,7 @@ function FocusTaskCard({
             <Timer className="size-3.5" />
             {isStarted ? "Tiếp tục Pomodoro" : "Bắt đầu học"}
           </Button>
-          <Button
-            size="sm"
-            variant="success"
-            onClick={onProgress}
-            title="Ghi nhận kết quả thực tế"
-          >
+          <Button size="sm" variant="success" onClick={onProgress} title="Ghi nhận kết quả thực tế">
             <CheckCircle2 className="size-3.5" />
             Ghi nhận kết quả
           </Button>
@@ -1958,4 +2010,3 @@ function MoreActionsMenu({
     </div>
   );
 }
-
