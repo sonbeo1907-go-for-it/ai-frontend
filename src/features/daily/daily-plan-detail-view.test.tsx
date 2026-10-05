@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DailyPlanDetailView } from "./daily-plan-detail-view";
 import { apiRequest } from "@/lib/api-client";
@@ -157,6 +157,11 @@ describe("DailyPlanDetailView - US-PLN-UX-02", () => {
     // AC3: Task-first Focus Task Card
     expect(screen.getByText(/Nhiệm vụ tiếp theo cần làm/i)).not.toBeNull();
     expect(screen.getByText(/Đang làm dở/i)).not.toBeNull();
+
+    // Version switching belongs to the header; duplicated sidebar cards must not return.
+    expect(screen.getByRole("combobox", { name: "Chọn phiên bản kế hoạch" })).not.toBeNull();
+    expect(screen.queryByText(/^Phiên bản \(/i)).toBeNull();
+    expect(screen.queryByText("Tổng quan ngày")).toBeNull();
   });
 
   it("AC1 & AC4: renders primary action 'Kích hoạt kế hoạch' and DRAFT banner for DRAFT version with items", async () => {
@@ -193,7 +198,9 @@ describe("DailyPlanDetailView - US-PLN-UX-02", () => {
     });
 
     // AC1: Primary action is "Thêm nhiệm vụ"
-    expect(screen.getAllByRole("button", { name: /Thêm nhiệm vụ/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("button", { name: /Thêm nhiệm vụ/i }).length).toBeGreaterThanOrEqual(
+      1,
+    );
 
     // AC4: Banner notes that items are needed before activation
     expect(screen.getByText(/Cần thêm ít nhất 1 nhiệm vụ để có thể kích hoạt/i)).not.toBeNull();
@@ -224,5 +231,143 @@ describe("DailyPlanDetailView - US-PLN-UX-02", () => {
     // AC5: Close menu with Escape
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("opens the required-step checklist instead of completing a task prematurely", async () => {
+    const versionWithIncompleteRequiredStep: DailyPlanVersion = {
+      ...mockVersionActive,
+      items: mockVersionActive.items.map((item) =>
+        item.id !== "item-1"
+          ? item
+          : {
+              ...item,
+              steps: [
+                {
+                  id: "step-required-1",
+                  entityVersion: 0,
+                  dailyPlanItemId: item.id,
+                  title: "Hoàn thành bước bắt buộc",
+                  orderIndex: 0,
+                  estimatedMinutes: 10,
+                  required: true,
+                  completed: false,
+                  stateVersion: 0,
+                },
+              ],
+              stepProgress: {
+                requiredCount: 1,
+                completedRequiredCount: 0,
+                completionPercentage: 0,
+                allRequiredStepsCompleted: false,
+              },
+            },
+      ),
+    };
+    vi.mocked(apiRequest).mockImplementation(async (url) => {
+      if (url === "/api/v1/daily-plans/plan-123") return mockPlanActive;
+      if (url === "/api/v1/daily-plans/plan-123/versions") {
+        return [versionWithIncompleteRequiredStep];
+      }
+      return {};
+    });
+
+    render(<DailyPlanDetailView />);
+
+    let completeButton: HTMLElement | undefined;
+    await waitFor(() => {
+      completeButton = screen
+        .getAllByRole("button", { name: /^Hoàn thành$/i })
+        .find((button) => button.closest("article")?.textContent?.includes("0/1"));
+      expect(completeButton).toBeDefined();
+    });
+
+    fireEvent.click(completeButton!);
+
+    expect(screen.getByRole("dialog")).not.toBeNull();
+    expect(screen.getByText("Chi tiết nhiệm vụ")).not.toBeNull();
+    expect(screen.getByText("Hoàn thành bước bắt buộc")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Lưu tiến độ" })).toBeNull();
+  });
+
+  it("allows COMPLETED when the outcome modal will atomically finish the last required step", async () => {
+    const requiredSteps = [
+      {
+        id: "step-required-1",
+        entityVersion: 0,
+        dailyPlanItemId: "item-1",
+        title: "Bước bắt buộc 1",
+        orderIndex: 0,
+        estimatedMinutes: 10,
+        required: true,
+        completed: true,
+        stateVersion: 1,
+      },
+      {
+        id: "step-required-2",
+        entityVersion: 0,
+        dailyPlanItemId: "item-1",
+        title: "Bước bắt buộc 2",
+        orderIndex: 1,
+        estimatedMinutes: 10,
+        required: true,
+        completed: true,
+        stateVersion: 1,
+      },
+      {
+        id: "step-required-3",
+        entityVersion: 0,
+        dailyPlanItemId: "item-1",
+        title: "Bước bắt buộc 3",
+        orderIndex: 2,
+        estimatedMinutes: 10,
+        required: true,
+        completed: false,
+        stateVersion: 0,
+      },
+    ];
+    const versionWithPendingLastRequiredStep: DailyPlanVersion = {
+      ...mockVersionActive,
+      items: mockVersionActive.items.map((item) =>
+        item.id !== "item-1"
+          ? item
+          : {
+              ...item,
+              steps: requiredSteps,
+              stepProgress: {
+                requiredCount: 3,
+                completedRequiredCount: 2,
+                completionPercentage: 67,
+                allRequiredStepsCompleted: false,
+              },
+            },
+      ),
+    };
+    vi.mocked(apiRequest).mockImplementation(async (url) => {
+      if (url === "/api/v1/daily-plans/plan-123") return mockPlanActive;
+      if (url === "/api/v1/daily-plans/plan-123/versions") {
+        return [versionWithPendingLastRequiredStep];
+      }
+      return {};
+    });
+
+    render(<DailyPlanDetailView />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle("Xem các bước checklist").length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getAllByTitle("Xem các bước checklist")[0]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Hoàn thành: Bước bắt buộc 3" }));
+
+    const outcomeDialog = await screen.findByRole("dialog");
+    expect(within(outcomeDialog).getByText("Hoàn thành bước và nhiệm vụ")).not.toBeNull();
+
+    const completedOption = within(outcomeDialog)
+      .getAllByRole("button")
+      .find((button) => button.textContent === "Hoàn thành");
+    expect(completedOption).toBeDefined();
+    expect((completedOption as HTMLButtonElement).disabled).toBe(false);
+    expect(completedOption?.getAttribute("aria-pressed")).toBe("true");
+    expect(within(outcomeDialog).getByRole("button", { name: "Một phần" })).not.toBeNull();
+    expect(within(outcomeDialog).getByRole("button", { name: "Bỏ qua" })).not.toBeNull();
   });
 });

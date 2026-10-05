@@ -241,6 +241,7 @@ export interface DailyPlanItem {
   plannedMinutes?: number;
   orderIndex?: number;
   status: DailyTaskStatus;
+  completionPercentage?: number;
   completedAt?: string;
   createdAt: string;
   roadmapItemId?: string;
@@ -282,6 +283,11 @@ export interface DailyPlanTaskStepsResponse {
   dailyPlanItemId: string;
   steps: DailyPlanTaskStep[];
   progress: TaskStepProgress;
+}
+
+export interface CompleteTaskStepAndRecordProgressResponse {
+  taskSteps: DailyPlanTaskStepsResponse;
+  task: DailyPlanItem;
 }
 
 export type TaskGuidanceRevisionStatus = "DRAFT" | "SUPERSEDED" | "ARCHIVED";

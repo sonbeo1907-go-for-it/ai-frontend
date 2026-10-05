@@ -46,6 +46,38 @@ describe("dailyPlanApi task steps", () => {
     );
   });
 
+  it("atomically completes the final step and records the exact task outcome", async () => {
+    const outcome = {
+      status: "PARTIALLY_COMPLETED" as const,
+      completionPercentage: 35,
+      actualMinutes: 20,
+      actualResult: "Đã hoàn thành phần chính",
+      difficulty: 4,
+      understandingRating: 3,
+      note: "Cần luyện thêm",
+    };
+
+    await dailyPlanApi.completeTaskStepAndRecordProgress(
+      "plan-1",
+      "version-1",
+      "item-1",
+      "step-1",
+      4,
+      outcome,
+      "completion-request-1",
+    );
+
+    const request = vi.mocked(fetch).mock.calls[0][1];
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/daily-plans/plan-1/versions/version-1/items/item-1/steps/step-1/complete-with-outcome",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ stateVersion: 4, outcome }),
+      }),
+    );
+    expect(new Headers(request?.headers).get("Idempotency-Key")).toBe("completion-request-1");
+  });
+
   it("updates a DRAFT version budget with optimistic concurrency", async () => {
     await dailyPlanApi.updateBudget("plan-1", "version-1", 270, 6);
 
@@ -56,6 +88,17 @@ describe("dailyPlanApi task steps", () => {
         body: JSON.stringify({ availableMinutes: 270, entityVersion: 6 }),
       }),
     );
+  });
+
+  it("starts a task without sending a progress payload", async () => {
+    await dailyPlanApi.startTask("plan-1", "item-1");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/daily-plans/plan-1/items/item-1/start",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const request = vi.mocked(fetch).mock.calls[0][1];
+    expect(request?.body).toBeUndefined();
   });
 });
 
@@ -204,4 +247,3 @@ describe("dailyPlanApi getTodayPlan", () => {
     await expect(dailyPlanApi.getTodayPlan()).rejects.toThrow("Database failure");
   });
 });
-
