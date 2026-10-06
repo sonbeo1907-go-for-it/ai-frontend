@@ -6,12 +6,20 @@ export async function fetchDashboardReport(roadmapId?: string): Promise<Dashboar
   return apiRequest<DashboardReport>(`/api/v1/reports/dashboard${query}`);
 }
 
-export async function fetchKnowledgeMap(roadmapId?: string): Promise<KnowledgeMapResponse> {
+export async function fetchKnowledgeMap(
+  roadmapId?: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeMapResponse> {
   const query = roadmapId ? `?roadmapId=${encodeURIComponent(roadmapId)}` : "";
-  return apiRequest<KnowledgeMapResponse>(`/api/v1/reports/knowledge-map${query}`);
+  return apiRequest<KnowledgeMapResponse>(`/api/v1/reports/knowledge-map${query}`, { signal });
 }
 
-export async function fetchWeakTopicsTimeline(roadmapId?: string): Promise<WeakTopicTimelineItem[]> {
+export async function fetchWeakTopicsTimeline(
+  roadmapId?: string,
+  signal?: AbortSignal,
+): Promise<WeakTopicTimelineItem[]> {
   const query = roadmapId ? `?roadmapId=${encodeURIComponent(roadmapId)}` : "";
-  return apiRequest<WeakTopicTimelineItem[]>(`/api/v1/reports/weak-topics-timeline${query}`);
+  return apiRequest<WeakTopicTimelineItem[]>(`/api/v1/reports/weak-topics-timeline${query}`, {
+    signal,
+  });
 }

@@ -20,20 +20,19 @@ import type { KnowledgeMapResponse } from "@/types/api";
 
 type FilterStatus = "ALL" | "MASTERED" | "IN_PROGRESS";
 
-export function KnowledgeMapView({
-  data,
-}: {
-  data: KnowledgeMapResponse;
-}) {
+export function KnowledgeMapView({ data }: { data: KnowledgeMapResponse }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("ALL");
   const [expandedMilestones, setExpandedMilestones] = useState<Record<string, boolean>>({});
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
+  const firstMilestoneId = data.milestones[0]?.id;
+  const searching = searchQuery.trim().length > 0;
+  const filtering = filterStatus !== "ALL";
 
   const toggleMilestone = (id: string) => {
     setExpandedMilestones((prev) => ({
       ...prev,
-      [id]: !prev[id],
+      [id]: !(prev[id] ?? id === firstMilestoneId),
     }));
   };
 
@@ -58,7 +57,7 @@ export function KnowledgeMapView({
 
           // Search query filter
           if (searchQuery.trim() !== "") {
-            const query = searchQuery.toLowerCase();
+            const query = searchQuery.trim().toLowerCase();
             const matchesTopic =
               topic.title.toLowerCase().includes(query) ||
               (topic.description && topic.description.toLowerCase().includes(query));
@@ -126,9 +125,7 @@ export function KnowledgeMapView({
               </p>
             </div>
           </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Đạt 100% các đơn vị học tập thành công
-          </p>
+          <p className="mt-3 text-xs text-slate-500">Đạt 100% các đơn vị học tập thành công</p>
         </Card>
 
         <Card className="border-slate-100 bg-white p-5 shadow-sm">
@@ -236,7 +233,10 @@ export function KnowledgeMapView({
       ) : (
         <div className="space-y-4">
           {filteredMilestones.map((milestone, mIndex) => {
-            const isMilestoneExpanded = expandedMilestones[milestone.id] !== false; // default expanded
+            const isMilestoneExpanded =
+              searching ||
+              filtering ||
+              (expandedMilestones[milestone.id] ?? milestone.id === firstMilestoneId);
 
             const milestoneTopicsMastered = milestone.topics.filter((t) => t.mastered).length;
             const milestoneTopicsTotal = milestone.topics.length;
@@ -252,9 +252,14 @@ export function KnowledgeMapView({
                 <div
                   role="button"
                   tabIndex={0}
+                  aria-expanded={isMilestoneExpanded}
+                  aria-controls={`milestone-topics-${milestone.id}`}
                   onClick={() => toggleMilestone(milestone.id)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") toggleMilestone(milestone.id);
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleMilestone(milestone.id);
+                    }
                   }}
                   className={`flex cursor-pointer items-center justify-between gap-4 p-5 transition ${
                     isAllMilestoneMastered
@@ -303,10 +308,13 @@ export function KnowledgeMapView({
 
                 {/* Milestone Topics List */}
                 {isMilestoneExpanded && (
-                  <div className="divide-y divide-slate-100 border-t border-slate-100 p-3 sm:p-5">
+                  <div
+                    id={`milestone-topics-${milestone.id}`}
+                    className="divide-y divide-slate-100 border-t border-slate-100 p-3 sm:p-5"
+                  >
                     <div className="grid gap-4 md:grid-cols-2">
                       {milestone.topics.map((topic) => {
-                        const isTopicExpanded = !!expandedTopics[topic.id];
+                        const isTopicExpanded = searching || !!expandedTopics[topic.id];
                         const masteredUnitsCount = topic.learningUnits.filter(
                           (u) => u.mastered,
                         ).length;
@@ -372,7 +380,10 @@ export function KnowledgeMapView({
                                   aria-label="Tiến độ bài học"
                                   aria-valuemin={0}
                                   aria-valuemax={100}
-                                  aria-valuenow={Math.max(0, Math.min(100, topic.completionPercentage))}
+                                  aria-valuenow={Math.max(
+                                    0,
+                                    Math.min(100, topic.completionPercentage),
+                                  )}
                                 >
                                   <div
                                     className={`h-full rounded-full transition-all ${
@@ -380,7 +391,9 @@ export function KnowledgeMapView({
                                         ? "bg-gradient-to-r from-emerald-500 to-teal-500"
                                         : "bg-gradient-to-r from-indigo-500 to-blue-500"
                                     }`}
-                                    style={{ width: `${Math.max(0, Math.min(100, topic.completionPercentage))}%` }}
+                                    style={{
+                                      width: `${Math.max(0, Math.min(100, topic.completionPercentage))}%`,
+                                    }}
                                   />
                                 </div>
                               </div>
@@ -391,6 +404,8 @@ export function KnowledgeMapView({
                               <div className="mt-4 border-t border-slate-100 pt-3">
                                 <button
                                   type="button"
+                                  aria-expanded={isTopicExpanded}
+                                  aria-controls={`topic-units-${topic.id}`}
                                   onClick={() => toggleTopic(topic.id)}
                                   className="flex w-full items-center justify-between text-xs font-semibold text-slate-600 hover:text-slate-900"
                                 >
@@ -406,7 +421,10 @@ export function KnowledgeMapView({
                                 </button>
 
                                 {isTopicExpanded && (
-                                  <div className="mt-2 space-y-1.5 pl-2">
+                                  <div
+                                    id={`topic-units-${topic.id}`}
+                                    className="mt-2 space-y-1.5 pl-2"
+                                  >
                                     {topic.learningUnits.map((unit) => (
                                       <div
                                         key={unit.id}

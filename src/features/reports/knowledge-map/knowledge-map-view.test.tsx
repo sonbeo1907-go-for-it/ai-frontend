@@ -140,6 +140,69 @@ describe("KnowledgeMapView", () => {
     // Java Collections (not mastered) should not be displayed
     expect(screen.queryByText("Java Collections")).toBeNull();
   });
+
+  it("mounts only the first Milestone's topics until another Milestone is expanded", () => {
+    const laterMilestone = {
+      ...mockMapData.milestones[0],
+      id: "milestone-later",
+      title: "Later milestone",
+      topics: [
+        {
+          ...mockMapData.milestones[0].topics[0],
+          id: "topic-later",
+          title: "Later topic",
+        },
+      ],
+    };
+    render(
+      <KnowledgeMapView
+        data={{ ...mockMapData, milestones: [...mockMapData.milestones, laterMilestone] }}
+      />,
+    );
+
+    expect(screen.getByText("OOP trong Java")).not.toBeNull();
+    expect(screen.queryByText("Later topic")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Later milestone/ }));
+    expect(screen.getByText("Later topic")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /Cột mốc 1: Java Core/ }));
+    expect(screen.queryByText("OOP trong Java")).toBeNull();
+  });
+
+  it("finds units in collapsed branches and restores the previous expansion after clearing search", () => {
+    const laterMilestone = {
+      ...mockMapData.milestones[0],
+      id: "milestone-later",
+      title: "Later milestone",
+      topics: [
+        {
+          ...mockMapData.milestones[0].topics[0],
+          id: "topic-later",
+          title: "Later topic",
+          learningUnits: [
+            {
+              ...mockMapData.milestones[0].topics[0].learningUnits[0],
+              id: "unit-later",
+              title: "Distinct future unit",
+            },
+          ],
+        },
+      ],
+    };
+    render(
+      <KnowledgeMapView
+        data={{ ...mockMapData, milestones: [...mockMapData.milestones, laterMilestone] }}
+      />,
+    );
+    const search = screen.getByPlaceholderText("Tìm kiếm chủ đề hoặc bài học...");
+    expect(screen.queryByText("Distinct future unit")).toBeNull();
+    fireEvent.change(search, { target: { value: "future unit" } });
+    expect(screen.getByText("Distinct future unit")).not.toBeNull();
+    expect(screen.getByText("66.7%")).not.toBeNull();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(screen.queryByText("Later topic")).toBeNull();
+    expect(screen.getByText("OOP trong Java")).not.toBeNull();
+  });
 });
 
 describe("WeakTopicsTimelineView", () => {

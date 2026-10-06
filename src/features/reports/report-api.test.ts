@@ -62,4 +62,18 @@ describe("report-api", () => {
       expect.objectContaining({ cache: "no-store" }),
     );
   });
+
+  it("passes the abort signal through to both report requests", async () => {
+    const controller = new AbortController();
+    await fetchKnowledgeMap("roadmap-123", controller.signal);
+    await fetchWeakTopicsTimeline("roadmap-123", controller.signal);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/reports/knowledge-map?roadmapId=roadmap-123",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/reports/weak-topics-timeline?roadmapId=roadmap-123",
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
 });
