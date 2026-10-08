@@ -8,6 +8,7 @@ import {
   CalendarCheck2,
   CalendarDays,
   Clock3,
+  Coins,
   Files,
   Globe2,
   LayoutDashboard,
@@ -19,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/features/auth/auth-context";
+import { WalletHeaderBadge } from "@/features/billing/wallet-header-badge";
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -28,10 +30,15 @@ const navigation = [
   { href: "/knowledge-map", label: "Tiến độ mục tiêu", icon: Target },
   { href: "/materials", label: "Tài liệu nguồn", icon: Files },
   { href: "/dashboard", label: "Tổng quan", icon: LayoutDashboard },
+  { href: "/billing", label: "Ví AI Credit", icon: Coins },
   { href: "/profile", label: "Hồ sơ", icon: Settings2 },
 ];
 
 const pageMetadata: Record<string, { title: string; subtitle: string }> = {
+  "/billing": {
+    title: "Ví AI Credit",
+    subtitle: "Xem số dư Credit khả dụng và đang giữ chỗ cho các tính năng AI.",
+  },
   "/dashboard": {
     title: "Tổng quan học tập",
     subtitle: "Tiếp tục từ nơi bạn đã dừng lại.",
@@ -242,8 +249,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Menu className="size-5" />
           </button>
           <Brand />
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <QuickActions />
+            <WalletHeaderBadge />
             <AccountMenu />
           </div>
         </div>

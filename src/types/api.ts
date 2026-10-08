@@ -52,6 +52,12 @@ export type AiExecutionResultType =
   | "TASK_GUIDANCE_REVISION"
   | "QUIZ";
 
+export interface CreditWalletResponse {
+  id: string;
+  availableCredits: number;
+  reservedCredits: number;
+}
+
 export interface ApiResponse<T> {
   data: T;
 }
