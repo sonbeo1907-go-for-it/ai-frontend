@@ -35,9 +35,7 @@ describe("useTopUpOrder", () => {
   });
 
   it("fetches active packages on mount", async () => {
-    vi.mocked(billingApi.getPackages).mockResolvedValueOnce({
-      data: mockPackages,
-    });
+    vi.mocked(billingApi.getPackages).mockResolvedValueOnce(mockPackages);
 
     const { result } = renderHook(() => useTopUpOrder());
 
@@ -52,9 +50,7 @@ describe("useTopUpOrder", () => {
   });
 
   it("creates a top-up order and redirects to checkoutUrl", async () => {
-    vi.mocked(billingApi.getPackages).mockResolvedValueOnce({
-      data: mockPackages,
-    });
+    vi.mocked(billingApi.getPackages).mockResolvedValueOnce(mockPackages);
 
     const mockOrder: TopUpOrderResponse = {
       id: "order-123",
@@ -73,9 +69,7 @@ describe("useTopUpOrder", () => {
       createdAt: "2026-10-08T15:45:00Z",
     };
 
-    vi.mocked(billingApi.createTopUpOrder).mockResolvedValueOnce({
-      data: mockOrder,
-    });
+    vi.mocked(billingApi.createTopUpOrder).mockResolvedValueOnce(mockOrder);
 
     const { result } = renderHook(() => useTopUpOrder());
 
@@ -97,9 +91,7 @@ describe("useTopUpOrder", () => {
   });
 
   it("handles payment provider unavailable error gracefully", async () => {
-    vi.mocked(billingApi.getPackages).mockResolvedValueOnce({
-      data: mockPackages,
-    });
+    vi.mocked(billingApi.getPackages).mockResolvedValueOnce(mockPackages);
 
     vi.mocked(billingApi.createTopUpOrder).mockRejectedValueOnce(
       new ApiClientError({

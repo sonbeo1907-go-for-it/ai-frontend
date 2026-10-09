@@ -158,9 +158,6 @@ export const authApi = {
   },
 };
 
-export const billingApi = {
-  getWallet: () => apiRequest<CreditWalletResponse>("/api/v1/billing/wallet"),
-};
 
 const AI_PROVIDER_CONFIGS_PATH = "/api/v1/admin/ai-provider-configs";
 const AI_PROVIDERS_PATH = "/api/v1/admin/ai-providers";
@@ -374,6 +371,7 @@ export const BILLING_PACKAGES_PATH = "/api/v1/billing/packages";
 export const BILLING_TOP_UP_ORDERS_PATH = "/api/v1/billing/top-up-orders";
 
 export const billingApi = {
+  getWallet: () => apiRequest<CreditWalletResponse>("/api/v1/billing/wallet"),
   getPackages: () =>
     apiRequest<CreditPackageResponse[]>(BILLING_PACKAGES_PATH),
   createTopUpOrder: (packageId: string, idempotencyKey: string) =>
@@ -387,6 +385,10 @@ export const billingApi = {
   getTopUpOrder: (orderId: string) =>
     apiRequest<TopUpOrderResponse>(
       `${BILLING_TOP_UP_ORDERS_PATH}/${encodeURIComponent(orderId)}`,
+    ),
+  getTopUpOrderByCode: (orderCode: string) =>
+    apiRequest<TopUpOrderResponse>(
+      `${BILLING_TOP_UP_ORDERS_PATH}/by-code/${encodeURIComponent(orderCode)}`,
     ),
 };
 

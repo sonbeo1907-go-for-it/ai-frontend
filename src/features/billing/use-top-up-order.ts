@@ -27,7 +27,7 @@ export function useTopUpOrder(): UseTopUpOrderResult {
     setPackageError(null);
     try {
       const response = await billingApi.getPackages();
-      setPackages(response.data);
+      setPackages(response);
     } catch (err) {
       setPackageError(getErrorMessage(err));
     } finally {
@@ -53,7 +53,7 @@ export function useTopUpOrder(): UseTopUpOrderResult {
 
       try {
         const response = await billingApi.createTopUpOrder(packageId, idempotencyKey);
-        const order = response.data;
+        const order = response;
         setLastCreatedOrder(order);
 
         // If checkoutUrl is present, redirect user to the payment provider

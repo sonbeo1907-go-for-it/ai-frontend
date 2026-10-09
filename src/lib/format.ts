@@ -46,3 +46,17 @@ export function initials(name?: string) {
     .join("")
     .toUpperCase();
 }
+
+export function formatCurrency(amount?: number) {
+  if (amount == null) return "0 ₫";
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function formatNumber(value?: number) {
+  if (value == null) return "0";
+  return new Intl.NumberFormat("vi-VN").format(value);
+}
