@@ -19,6 +19,9 @@ import type {
   CreateAiProviderConfigInput,
   CreateAiProviderInput,
   CreditWalletResponse,
+  AiCreditRate,
+  CreditTransaction,
+  TransactionFilterParams,
   PageResponse,
   ProfileResponse,
   TokenResponse,
@@ -390,6 +393,19 @@ export const billingApi = {
     apiRequest<TopUpOrderResponse>(
       `${BILLING_TOP_UP_ORDERS_PATH}/by-code/${encodeURIComponent(orderCode)}`,
     ),
+  getAiPrices: () => apiRequest<AiCreditRate[]>("/api/v1/billing/ai-prices"),
+  getTransactions: (params?: TransactionFilterParams) => {
+    const search = new URLSearchParams();
+    if (params?.type) search.set("entryType", params.type);
+    if (params?.from) search.set("fromDate", params.from);
+    if (params?.to) search.set("toDate", params.to);
+    if (params?.page !== undefined) search.set("page", String(params.page));
+    if (params?.size !== undefined) search.set("size", String(params.size));
+    const query = search.toString();
+    return apiRequest<PageResponse<CreditTransaction>>(
+      query ? `/api/v1/billing/transactions?${query}` : "/api/v1/billing/transactions",
+    );
+  },
 };
 
 

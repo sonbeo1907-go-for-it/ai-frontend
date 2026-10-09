@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, FileText, Sparkles } from "lucide-react";
+import { AlertCircle, Check, Coins, FileText, Sparkles, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { fetchAiPrices, fetchCreditWallet, type CreditWallet } from "@/features/billing/billing-api";
 import { apiRequest, getErrorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import type { Material, PageResponse } from "@/types/api";
@@ -37,6 +38,25 @@ export function RoadmapAiGenerationModal({
   const [adjustmentPrompt, setAdjustmentPrompt] = useState("");
   const [loadingMaterials, setLoadingMaterials] = useState(mode === "generate");
   const [materialsError, setMaterialsError] = useState("");
+  const [creditRate, setCreditRate] = useState<number>(10);
+  const [wallet, setWallet] = useState<CreditWallet | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([fetchAiPrices(), fetchCreditWallet()]).then(([pricesRes, walletRes]) => {
+      if (!active) return;
+      if (pricesRes.status === "fulfilled") {
+        const rate = pricesRes.value.find((r) => r.purpose === "ROADMAP_GENERATION");
+        if (rate) setCreditRate(rate.creditCost);
+      }
+      if (walletRes.status === "fulfilled") {
+        setWallet(walletRes.value);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const loadMaterials = useCallback(async () => {
     setLoadingMaterials(true);
@@ -186,6 +206,61 @@ export function RoadmapAiGenerationModal({
           </Field>
         )}
 
+        {/* US-CRD-01: Hiển thị giá Credit trước khi người dùng xác nhận thao tác AI */}
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
+            <div className="flex items-center gap-2 font-medium text-slate-700">
+              <Coins className="size-4 text-amber-500" />
+              <span>Chi phí thao tác:</span>
+              <span className="font-bold text-slate-900">{creditRate} AI Credits</span>
+            </div>
+            {wallet && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <Wallet className="size-4 text-indigo-500" />
+                <span>Số dư khả dụng:</span>
+                <span
+                  className={`font-bold ${
+                    wallet.availableCredits < creditRate ? "text-rose-600" : "text-emerald-600"
+                  }`}
+                >
+                  {wallet.availableCredits} Credits
+                </span>
+              </div>
+            )}
+          </div>
+
+          {wallet && wallet.availableCredits < creditRate && (
+            <div className="mt-3.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-800">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="size-4 shrink-0 text-amber-600 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-amber-900">
+                    Số dư AI Credit không đủ để thực hiện thao tác (Cần {creditRate} credit, khả dụng: {wallet.availableCredits} credit).
+                  </p>
+                  <p className="text-amber-700">
+                    Bạn có thể nạp thêm Credit vào ví hoặc tiếp tục bằng quy trình lập lộ trình thủ công hiện có.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                    <a
+                      href="/billing"
+                      className="inline-flex items-center rounded-lg bg-amber-600 px-3 py-1.5 font-bold text-white shadow-sm transition hover:bg-amber-700"
+                    >
+                      Nạp thêm Credit
+                    </a>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-bold text-amber-900 shadow-sm transition hover:bg-amber-100"
+                    >
+                      Tiếp tục tạo thủ công
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {submissionError && (
           <div className="rounded-2xl bg-rose-50 p-4 text-sm font-semibold text-rose-700">
             {submissionError}
@@ -200,7 +275,7 @@ export function RoadmapAiGenerationModal({
             type="button"
             variant="success"
             loading={busy}
-            disabled={loadingMaterials}
+            disabled={loadingMaterials || (wallet !== null && wallet.availableCredits < creditRate)}
             onClick={submit}
           >
             <Sparkles className="size-4" />

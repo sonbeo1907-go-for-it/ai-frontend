@@ -4,6 +4,7 @@ export type AiFailureCategory =
   | "PROVIDER"
   | "INVALID_OUTPUT"
   | "BUDGET"
+  | "CREDIT"
   | "TEMPORARY"
   | "UNKNOWN";
 
@@ -35,6 +36,13 @@ const CATEGORY_DEFINITIONS: Record<
     title: "Cấu hình AI chưa hoàn tất",
     description:
       "Hệ thống gặp sự cố về thiết lập nhà cung cấp hoặc thông tin xác thực AI. Bạn có thể tiếp tục thực hiện thủ công hoặc liên hệ quản trị viên.",
+    dataSafetyMessage: DEFAULT_DATA_SAFETY_MESSAGE,
+    recoveryAction: "MANUAL",
+  },
+  CREDIT: {
+    title: "Số dư AI Credit không đủ",
+    description:
+      "Số dư ví AI Credit của bạn không đủ để thực hiện thao tác này. Bạn có thể nạp thêm Credit hoặc tiếp tục bằng quy trình thực hiện thủ công.",
     dataSafetyMessage: DEFAULT_DATA_SAFETY_MESSAGE,
     recoveryAction: "MANUAL",
   },
@@ -115,6 +123,10 @@ const CODE_TO_CATEGORY: Record<string, AiFailureCategory> = {
   AI_RATE_LIMIT: "BUDGET",
   QUOTA_EXCEEDED: "BUDGET",
   TOKEN_BUDGET_EXCEEDED: "BUDGET",
+
+  // Credit (CREDIT)
+  INSUFFICIENT_CREDITS: "CREDIT",
+  INSUFFICIENT_AI_CREDITS: "CREDIT",
 
   // Lỗi tạm thời (TEMPORARY)
   NETWORK_ERROR: "TEMPORARY",

@@ -3,6 +3,7 @@
 import React from "react";
 import { WalletCard } from "@/features/billing/wallet-card";
 import { CreditPackageList } from "@/features/billing/credit-package-list";
+import { CreditTransactionsView } from "@/features/billing/credit-transactions-view";
 import { useTopUpOrder } from "@/features/billing/use-top-up-order";
 
 export default function BillingPage() {
@@ -66,6 +67,11 @@ export default function BillingPage() {
           error={purchaseError}
         />
       )}
+
+      {/* Credit Transaction History */}
+      <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+        <CreditTransactionsView />
+      </div>
     </div>
   );
 }

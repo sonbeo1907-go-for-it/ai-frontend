@@ -58,6 +58,48 @@ export interface CreditWalletResponse {
   reservedCredits: number;
 }
 
+export interface AiCreditRate {
+  id: string;
+  purpose: string;
+  modelCategory?: string | null;
+  creditCost: number;
+}
+
+export type LedgerEntryType =
+  | "WELCOME_BONUS"
+  | "TOP_UP"
+  | "RESERVE"
+  | "USAGE"
+  | "RELEASE_RESERVE"
+  | "REFUND"
+  | "ADJUSTMENT"
+  | "PROMOTION"
+  | "RELEASE";
+
+export interface CreditTransaction {
+  id: string;
+  recordedAt: string;
+  entryType: LedgerEntryType;
+  amount: number;
+  availableDelta: number;
+  reservedDelta: number;
+  availableBalanceAfter: number;
+  reservedBalanceAfter: number;
+  totalBalanceAfter: number;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  description: string;
+  status: string;
+}
+
+export interface TransactionFilterParams {
+  type?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  size?: number;
+}
+
 export interface ApiResponse<T> {
   data: T;
 }

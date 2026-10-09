@@ -87,6 +87,16 @@ describe("ai-error-taxonomy", () => {
     }
   });
 
+  it("maps credit error codes to CREDIT category and MANUAL recovery action", () => {
+    const taxonomy = getAiErrorTaxonomy("INSUFFICIENT_AI_CREDITS");
+    expect(taxonomy.category).toBe("CREDIT");
+    expect(taxonomy.recoveryAction).toBe("MANUAL");
+    expect(taxonomy.canRetry).toBe(false);
+    expect(taxonomy.canManual).toBe(true);
+    expect(taxonomy.title).toBe("Số dư AI Credit không đủ");
+    expect(taxonomy.description).toContain("nạp thêm Credit");
+  });
+
   it("maps network disruption codes to TEMPORARY category and RETRY recovery action", () => {
     const tempCodes = ["NETWORK_ERROR", "CONNECTION_RESET", "FETCH_ERROR", "TEMPORARY_ERROR"];
 
