@@ -21,6 +21,8 @@ import type {
   PageResponse,
   ProfileResponse,
   TokenResponse,
+  CreditPackageResponse,
+  TopUpOrderResponse,
   UpdateAiPromptDraftRequest,
   UpdateAiProviderCredentialInput,
   UpdateAiProviderConfigInput,
@@ -360,6 +362,26 @@ export const adminAiExecutionApi = {
   getExecutionDetail: (executionId: string) =>
     apiRequest<AdminAiExecutionDetail>(
       `${ADMIN_AI_EXECUTIONS_PATH}/${encodeURIComponent(executionId)}`,
+    ),
+};
+
+export const BILLING_PACKAGES_PATH = "/api/v1/billing/packages";
+export const BILLING_TOP_UP_ORDERS_PATH = "/api/v1/billing/top-up-orders";
+
+export const billingApi = {
+  getPackages: () =>
+    apiRequest<CreditPackageResponse[]>(BILLING_PACKAGES_PATH),
+  createTopUpOrder: (packageId: string, idempotencyKey: string) =>
+    apiRequest<TopUpOrderResponse>(BILLING_TOP_UP_ORDERS_PATH, {
+      method: "POST",
+      headers: {
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify({ packageId }),
+    }),
+  getTopUpOrder: (orderId: string) =>
+    apiRequest<TopUpOrderResponse>(
+      `${BILLING_TOP_UP_ORDERS_PATH}/${encodeURIComponent(orderId)}`,
     ),
 };
 

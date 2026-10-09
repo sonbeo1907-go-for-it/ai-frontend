@@ -776,3 +776,36 @@ export interface AdminAiExecutionFilterParams {
 
 export * from "./evaluation";
 
+export interface CreditPackageResponse {
+  id: string;
+  packageCode: string;
+  name: string;
+  priceVnd: number;
+  baseCredits: number;
+  bonusCredits: number;
+  totalCredits: number;
+  status: "ACTIVE" | "ARCHIVED";
+}
+
+export interface CreateTopUpOrderRequest {
+  packageId: string;
+}
+
+export interface TopUpOrderResponse {
+  id: string;
+  orderCode: string;
+  packageCode: string;
+  packageName: string;
+  priceVnd: number;
+  baseCredits: number;
+  bonusCredits: number;
+  totalCredits: number;
+  status: string;
+  currency: string;
+  paymentProvider: string;
+  checkoutUrl: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+
