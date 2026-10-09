@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { WalletCard } from "@/features/billing/wallet-card";
 import { CreditPackageList } from "@/features/billing/credit-package-list";
 import { useTopUpOrder } from "@/features/billing/use-top-up-order";
 
@@ -16,10 +17,12 @@ export default function BillingPage() {
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 space-y-8">
+      <WalletCard />
+
       <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
           Mua gói AI Credit
-        </h1>
+        </h2>
         <p className="mt-2 text-slate-600 dark:text-slate-400 max-w-2xl text-sm sm:text-base">
           Trang bị AI Credit để trải nghiệm tạo lộ trình học tập tự động, sinh kế hoạch mỗi ngày và
           nhận gợi ý thông minh từ AI.

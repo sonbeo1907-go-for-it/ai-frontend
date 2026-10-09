@@ -18,6 +18,7 @@ import type {
   CreateAiProviderCredentialInput,
   CreateAiProviderConfigInput,
   CreateAiProviderInput,
+  CreditWalletResponse,
   PageResponse,
   ProfileResponse,
   TokenResponse,
@@ -155,6 +156,10 @@ export const authApi = {
     await fetch("/api/v1/auth/logout", { method: "POST", headers, credentials: "include" });
     setAccessToken(null);
   },
+};
+
+export const billingApi = {
+  getWallet: () => apiRequest<CreditWalletResponse>("/api/v1/billing/wallet"),
 };
 
 const AI_PROVIDER_CONFIGS_PATH = "/api/v1/admin/ai-provider-configs";
