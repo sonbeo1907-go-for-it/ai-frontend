@@ -12,6 +12,7 @@ type FormState = {
   providerId: string;
   purpose: AiPurpose;
   model: string;
+  pricingCategory: string;
   timeoutSeconds: string;
   maxInputTokens: string;
   maxOutputTokens: string;
@@ -31,6 +32,7 @@ function initialState(
       providerId: config.providerId,
       purpose: config.purpose,
       model: config.model,
+      pricingCategory: config.pricingCategory ?? "",
       timeoutSeconds: String(config.timeoutSeconds),
       maxInputTokens: String(config.maxInputTokens),
       maxOutputTokens: String(config.maxOutputTokens),
@@ -48,6 +50,7 @@ function initialState(
   return {
     providerId: providers.find((provider) => provider.enabled)?.id ?? "",
     purpose,
+    pricingCategory: "",
     model: "",
     timeoutSeconds: "30",
     maxInputTokens: "16000",
@@ -105,6 +108,9 @@ export function AiProviderConfigForm({
       return "Provider cần ít nhất một credential đang bật trước khi làm mặc định.";
     }
     if (!form.model.trim()) return "Model không được để trống.";
+    if (form.pricingCategory.trim() && !/^[A-Za-z0-9_-]{1,50}$/.test(form.pricingCategory.trim())) {
+      return "Nhóm giá chỉ gồm chữ, số, _ hoặc -.";
+    }
 
     const timeout = Number(form.timeoutSeconds);
     const inputTokens = Number(form.maxInputTokens);
@@ -138,6 +144,7 @@ export function AiProviderConfigForm({
     setError(null);
     const common = {
       model: form.model.trim(),
+      pricingCategory: form.pricingCategory.trim().toUpperCase() || null,
       timeoutSeconds: Number(form.timeoutSeconds),
       maxInputTokens: Number(form.maxInputTokens),
       maxOutputTokens: Number(form.maxOutputTokens),
@@ -224,6 +231,18 @@ export function AiProviderConfigForm({
             maxLength={150}
             onChange={(event) => update("model", event.target.value)}
             placeholder="VD: gpt-4.1-mini, deepseek-chat"
+          />
+        </Field>
+
+        <Field
+          label="Nhóm giá Credit (tùy chọn)"
+          hint="Để trống để dùng giá mặc định của mục đích AI."
+        >
+          <Input
+            value={form.pricingCategory}
+            maxLength={50}
+            onChange={(event) => update("pricingCategory", event.target.value)}
+            placeholder="VD: STANDARD, PREMIUM"
           />
         </Field>
 

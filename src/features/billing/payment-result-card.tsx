@@ -55,8 +55,8 @@ export function PaymentResultCard({
             Đang chờ xác minh thanh toán
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Hệ thống đang kết nối trực tiếp với cổng thanh toán VNPAY để xác nhận giao dịch. Vui lòng
-            giữ nguyên màn hình trong giây lát.
+            Hệ thống đang kiểm tra trạng thái đơn hàng do máy chủ xác nhận. Credit chỉ được cộng sau
+            khi thanh toán được xác minh.
           </p>
         </div>
 
@@ -99,7 +99,12 @@ export function PaymentResultCard({
       >
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 shadow-lg shadow-emerald-500/20">
           <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M5 13l4 4L19 7"
+            />
           </svg>
         </div>
 
@@ -111,8 +116,8 @@ export function PaymentResultCard({
             Nạp AI Credit thành công!
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Credit đã được cộng vào tài khoản của bạn. Bạn đã có thể bắt đầu sử dụng các tính năng AI
-            thông minh ngay bây giờ.
+            Credit đã được cộng vào tài khoản của bạn. Bạn đã có thể bắt đầu sử dụng các tính năng
+            AI thông minh ngay bây giờ.
           </p>
         </div>
 
@@ -188,9 +193,9 @@ export function PaymentResultCard({
             Đang chờ ngân hàng xác nhận
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Hệ thống chưa nhận được phản hồi tức thì từ cổng thanh toán. Đừng lo lắng! Giao dịch của bạn
-            vẫn đang được xử lý. Credit sẽ tự động được cộng vào ví ngay khi nhận được xác nhận từ
-            VNPAY.
+            Hệ thống chưa nhận được phản hồi tức thì từ cổng thanh toán. Đừng lo lắng! Giao dịch của
+            bạn vẫn đang được xử lý. Credit sẽ tự động được cộng vào ví ngay khi nhận được xác nhận
+            từ VNPAY.
           </p>
         </div>
 
@@ -241,7 +246,7 @@ export function PaymentResultCard({
   const description = isCancelled
     ? "Bạn đã chủ động hủy giao dịch trên cổng thanh toán."
     : isExpired
-      ? "Thời gian thanh toán cho đơn hàng này đã kết thúc."
+      ? "Không thể mở thanh toán mới cho đơn này. Nếu đã bị trừ tiền, hãy kiểm tra lại cùng đơn hàng; xác nhận có thể đến muộn."
       : error || "Cổng thanh toán thông báo giao dịch chưa hoàn tất.";
 
   return (
@@ -251,13 +256,18 @@ export function PaymentResultCard({
     >
       <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 shadow-lg shadow-red-500/20">
         <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M6 18L18 6M6 6l12 12"
+          />
         </svg>
       </div>
 
       <div className="space-y-2">
         <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-300">
-          {status}
+          {isCancelled ? "Đã hủy" : isExpired ? "Hết hạn thanh toán" : "Chưa thành công"}
         </span>
         <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
           {title}
@@ -283,11 +293,19 @@ export function PaymentResultCard({
       )}
 
       <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isLoading}
+          className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold"
+        >
+          Kiểm tra lại đơn này
+        </button>
         <Link
           href="/billing"
           className="flex-1 inline-flex justify-center items-center px-5 py-3 rounded-xl font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20 transition-colors text-sm"
         >
-          Chọn gói nạp khác
+          Về trang Ví Credit
         </Link>
       </div>
     </div>

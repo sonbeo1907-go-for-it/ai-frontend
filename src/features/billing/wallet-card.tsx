@@ -35,7 +35,9 @@ export function WalletCard() {
                   title="Làm mới số dư"
                   aria-label="Làm mới"
                 >
-                  <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin text-indigo-600" : ""}`} />
+                  <RefreshCw
+                    className={`size-3.5 ${refreshing ? "animate-spin text-indigo-600" : ""}`}
+                  />
                 </button>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
@@ -91,7 +93,8 @@ export function WalletCard() {
               </span>
             </div>
             <p className="mt-2 text-xs text-slate-600">
-              Số credit tạm thời khoá trong khi tác vụ AI đang thực thi và sẽ được quyết toán khi hoàn thành.
+              Số credit tạm thời khoá trong khi tác vụ AI đang thực thi và sẽ được quyết toán khi
+              hoàn thành.
             </p>
           </div>
         </div>
@@ -102,11 +105,11 @@ export function WalletCard() {
         <div className="flex items-start gap-3">
           <Info className="size-5 shrink-0 text-indigo-600 mt-0.5" />
           <div className="space-y-1 text-xs leading-relaxed">
-            <p className="font-bold text-indigo-950 text-sm">
-              Nguyên tắc học tập không gián đoạn
-            </p>
+            <p className="font-bold text-indigo-950 text-sm">Nguyên tắc học tập không gián đoạn</p>
             <p className="text-slate-600">
-              Ngay cả khi số dư Credit bằng 0, bạn vẫn toàn quyền chủ động tự tạo, chỉnh sửa lộ trình học, thiết lập kế hoạch ngày và tích hợp các tài liệu học tập theo quy trình thủ công mà không gặp bất kỳ rào cản nào.
+              Ngay cả khi số dư Credit bằng 0, bạn vẫn toàn quyền chủ động tự tạo, chỉnh sửa lộ
+              trình học, thiết lập kế hoạch ngày và tích hợp các tài liệu học tập theo quy trình thủ
+              công mà không gặp bất kỳ rào cản nào.
             </p>
           </div>
         </div>
@@ -119,7 +122,8 @@ export function WalletCard() {
           Minh bạch tài chính & Sổ cái bất biến (Ledger)
         </div>
         <p className="mt-1.5 leading-relaxed">
-          Mỗi biến động số dư trong ví đều được bảo vệ bằng cơ chế sổ cái kép bất biến (immutable append-only ledger). Chỉ bạn mới có quyền xem thông tin ví cá nhân của mình.
+          Mỗi biến động số dư trong ví đều được bảo vệ bằng cơ chế sổ cái kép bất biến (immutable
+          append-only ledger). Chỉ bạn mới có quyền xem thông tin ví cá nhân của mình.
         </p>
       </div>
     </div>

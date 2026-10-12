@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { WalletCard } from "@/features/billing/wallet-card";
 import { CreditPackageList } from "@/features/billing/credit-package-list";
 import { CreditTransactionsView } from "@/features/billing/credit-transactions-view";
@@ -8,12 +9,14 @@ import { useTopUpOrder } from "@/features/billing/use-top-up-order";
 
 export default function BillingPage() {
   const {
+    paymentsEnabled,
     packages,
     loadingPackages,
     packageError,
     purchasingPackageId,
     purchaseError,
     purchasePackage,
+    lastCreatedOrder,
   } = useTopUpOrder();
 
   return (
@@ -59,13 +62,29 @@ export default function BillingPage() {
           <p className="text-red-700 dark:text-red-300 font-medium">{packageError}</p>
         </div>
       ) : (
-        <CreditPackageList
-          packages={packages}
-          loading={loadingPackages}
-          purchasingPackageId={purchasingPackageId}
-          onSelectPackage={(pkgId) => void purchasePackage(pkgId)}
-          error={purchaseError}
-        />
+        <>
+          {!loadingPackages && !paymentsEnabled && (
+            <p role="status" className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+              Nạp Credit hiện chưa được bật. Bạn vẫn có thể dùng số dư hiện có hoặc học thủ công.
+            </p>
+          )}
+          <CreditPackageList
+            paymentsEnabled={paymentsEnabled}
+            packages={packages}
+            loading={loadingPackages}
+            purchasingPackageId={purchasingPackageId}
+            onSelectPackage={(pkgId) => void purchasePackage(pkgId)}
+            error={purchaseError}
+          />
+          {lastCreatedOrder && (
+            <Link
+              className="inline-block text-sm font-semibold text-indigo-700 underline"
+              href={`/billing/checkout/result?orderId=${encodeURIComponent(lastCreatedOrder.id)}`}
+            >
+              Kiểm tra đơn hàng {lastCreatedOrder.orderCode}
+            </Link>
+          )}
+        </>
       )}
 
       {/* Credit Transaction History */}

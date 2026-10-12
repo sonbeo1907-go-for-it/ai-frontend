@@ -8,7 +8,13 @@ vi.mock("@/lib/api-client", () => {
     billingApi: {
       getWallet: () => mockApiRequest("/api/v1/billing/wallet"),
       getAiPrices: () => mockApiRequest("/api/v1/billing/ai-prices"),
-      getTransactions: (params?: { type?: string; from?: string; to?: string; page?: number; size?: number }) => {
+      getTransactions: (params?: {
+        type?: string;
+        from?: string;
+        to?: string;
+        page?: number;
+        size?: number;
+      }) => {
         const search = new URLSearchParams();
         if (params?.type) search.set("entryType", params.type);
         if (params?.from) search.set("fromDate", params.from);
@@ -16,7 +22,9 @@ vi.mock("@/lib/api-client", () => {
         if (params?.page !== undefined) search.set("page", String(params.page));
         if (params?.size !== undefined) search.set("size", String(params.size));
         const query = search.toString();
-        return mockApiRequest(query ? `/api/v1/billing/transactions?${query}` : "/api/v1/billing/transactions");
+        return mockApiRequest(
+          query ? `/api/v1/billing/transactions?${query}` : "/api/v1/billing/transactions",
+        );
       },
     },
   };

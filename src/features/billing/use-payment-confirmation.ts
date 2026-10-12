@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { billingApi, getErrorMessage } from "@/lib/api-client";
+import { ApiClientError, billingApi } from "@/lib/api-client";
 import type { TopUpOrderResponse } from "@/types/api";
 
 export type PaymentConfirmationStatus =
-  | "INITIALIZING"
-  | "VERIFYING"
-  | "SUCCESS"
-  | "FAILED"
-  | "CANCELLED"
-  | "EXPIRED"
-  | "TIMEOUT";
+  "INITIALIZING" | "VERIFYING" | "SUCCESS" | "FAILED" | "CANCELLED" | "EXPIRED" | "TIMEOUT";
 
 export interface UsePaymentConfirmationResult {
   order: TopUpOrderResponse | null;
@@ -37,137 +31,87 @@ export function usePaymentConfirmation({
 }: UsePaymentConfirmationOptions): UsePaymentConfirmationResult {
   const [order, setOrder] = useState<TopUpOrderResponse | null>(null);
   const [status, setStatus] = useState<PaymentConfirmationStatus>("INITIALIZING");
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pollCount, setPollCount] = useState<number>(0);
-
+  const [pollCount, setPollCount] = useState(0);
+  const [retryId, setRetryId] = useState(0);
   const onSuccessRef = useRef(onSuccess);
-  onSuccessRef.current = onSuccess;
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const activePollingRef = useRef<boolean>(true);
-
-  const fetchOrder = useCallback(async (): Promise<TopUpOrderResponse | null> => {
-    if (orderCode) {
-      return await billingApi.getTopUpOrderByCode(orderCode);
-    } else if (orderId) {
-      return await billingApi.getTopUpOrder(orderId);
-    }
-    return null;
-  }, [orderCode, orderId]);
-
-  const poll = useCallback(
-    async (attempt: number) => {
-      if (!activePollingRef.current) return;
-
-      try {
-        const orderData = await fetchOrder();
-        if (!orderData) {
-          setError("Không tìm thấy thông tin đơn hàng.");
-          setStatus("FAILED");
-          setIsLoading(false);
-          return;
-        }
-
-        setOrder(orderData);
-        setPollCount(attempt);
-
-        // Check backend order status
-        if (orderData.status === "PAID") {
-          setStatus("SUCCESS");
-          setIsLoading(false);
-          activePollingRef.current = false;
-          if (onSuccessRef.current) {
-            onSuccessRef.current(orderData);
-          }
-          return;
-        }
-
-        if (orderData.status === "FAILED") {
-          setStatus("FAILED");
-          setIsLoading(false);
-          activePollingRef.current = false;
-          return;
-        }
-
-        if (orderData.status === "CANCELLED") {
-          setStatus("CANCELLED");
-          setIsLoading(false);
-          activePollingRef.current = false;
-          return;
-        }
-
-        if (orderData.status === "EXPIRED") {
-          setStatus("EXPIRED");
-          setIsLoading(false);
-          activePollingRef.current = false;
-          return;
-        }
-
-        // Order is still PENDING: check if maximum polling attempts reached
-        if (attempt >= maxAttempts) {
-          // Rule: Hết thời gian chờ (timeout) không được tự kết luận giao dịch thất bại, chỉ báo chưa nhận được phản hồi
-          setStatus("TIMEOUT");
-          setIsLoading(false);
-          activePollingRef.current = false;
-          return;
-        }
-
-        // Schedule next poll
-        setStatus("VERIFYING");
-        setIsLoading(true);
-        timerRef.current = setTimeout(() => {
-          void poll(attempt + 1);
-        }, intervalMs);
-      } catch (err) {
-        // Network error during poll: continue trying until max attempts or notify
-        if (attempt >= maxAttempts) {
-          setStatus("TIMEOUT");
-          setIsLoading(false);
-          activePollingRef.current = false;
-        } else {
-          timerRef.current = setTimeout(() => {
-            void poll(attempt + 1);
-          }, intervalMs);
-        }
-        setError(getErrorMessage(err));
-      }
-    },
-    [fetchOrder, maxAttempts, intervalMs],
-  );
-
-  const retryPolling = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    activePollingRef.current = true;
-    setIsLoading(true);
-    setError(null);
-    setStatus("VERIFYING");
-    void poll(1);
-  }, [poll]);
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  }, [onSuccess]);
 
   useEffect(() => {
-    if (!orderCode && !orderId) {
-      setStatus("FAILED");
-      setError("Thiếu mã đơn hàng hoặc mã tham chiếu giao dịch.");
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let active = true;
+    const limit = Math.max(1, Math.min(maxAttempts, 60));
+
+    const finish = (nextStatus: PaymentConfirmationStatus) => {
+      setStatus(nextStatus);
       setIsLoading(false);
-      return;
-    }
-
-    activePollingRef.current = true;
-    void poll(1);
-
-    return () => {
-      activePollingRef.current = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
+      active = false;
     };
-  }, [orderCode, orderId, poll]);
 
-  return {
-    order,
-    status,
-    isLoading,
-    error,
-    pollCount,
-    retryPolling,
-  };
+    const poll = async (attempt: number): Promise<void> => {
+      try {
+        const data = orderCode
+          ? await billingApi.getTopUpOrderByCode(orderCode, controller.signal)
+          : orderId
+            ? await billingApi.getTopUpOrder(orderId, controller.signal)
+            : null;
+        // Ignore responses from previous orders, retries or unmounted modals.
+        if (!active) return;
+        setPollCount(attempt);
+        if (!data) {
+          setError("Thiếu thông tin đơn hàng để kiểm tra.");
+          finish("TIMEOUT");
+          return;
+        }
+        setOrder(data);
+        setError(null);
+        if (data.status === "PAID") {
+          finish("SUCCESS");
+          onSuccessRef.current?.(data);
+          return;
+        }
+        if (data.status === "FAILED" || data.status === "CANCELLED" || data.status === "EXPIRED") {
+          finish(data.status);
+          return;
+        }
+      } catch (failure) {
+        if (!active || controller.signal.aborted) return;
+        setPollCount(attempt);
+        setError(
+          "Chưa thể kiểm tra thanh toán. Nếu đã bị trừ tiền, đừng nạp lại; hãy kiểm tra cùng đơn hàng.",
+        );
+        if (failure instanceof ApiClientError && [401, 403, 404].includes(failure.details.status)) {
+          finish("TIMEOUT");
+          return;
+        }
+      }
+      if (attempt >= limit) {
+        finish("TIMEOUT");
+        return;
+      }
+      setStatus("VERIFYING");
+      timer = setTimeout(() => void poll(attempt + 1), Math.max(500, intervalMs));
+    };
+
+    timer = setTimeout(() => {
+      setOrder(null);
+      setError(null);
+      setPollCount(0);
+      setIsLoading(true);
+      setStatus("INITIALIZING");
+      void poll(1);
+    }, 0);
+    return () => {
+      active = false;
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [orderCode, orderId, maxAttempts, intervalMs, retryId]);
+
+  const retryPolling = useCallback(() => setRetryId((previous) => previous + 1), []);
+  return { order, status, isLoading, error, pollCount, retryPolling };
 }

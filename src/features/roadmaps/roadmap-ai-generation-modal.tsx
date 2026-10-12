@@ -6,8 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
-import { fetchAiPrices, fetchCreditWallet, type CreditWallet } from "@/features/billing/billing-api";
-import { apiRequest, getErrorMessage } from "@/lib/api-client";
+import { fetchCreditWallet, type CreditWallet } from "@/features/billing/billing-api";
+import { apiRequest, billingApi, getErrorMessage } from "@/lib/api-client";
 import { formatDate } from "@/lib/format";
 import type { Material, PageResponse } from "@/types/api";
 
@@ -38,19 +38,28 @@ export function RoadmapAiGenerationModal({
   const [adjustmentPrompt, setAdjustmentPrompt] = useState("");
   const [loadingMaterials, setLoadingMaterials] = useState(mode === "generate");
   const [materialsError, setMaterialsError] = useState("");
-  const [creditRate, setCreditRate] = useState<number>(10);
+  const [creditRate, setCreditRate] = useState<number | null>(null);
+  const [creditError, setCreditError] = useState("");
   const [wallet, setWallet] = useState<CreditWallet | null>(null);
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([fetchAiPrices(), fetchCreditWallet()]).then(([pricesRes, walletRes]) => {
+    Promise.allSettled([
+      billingApi.getAiPriceQuote("ROADMAP_GENERATION"),
+      fetchCreditWallet(),
+    ]).then(([pricesRes, walletRes]) => {
       if (!active) return;
       if (pricesRes.status === "fulfilled") {
-        const rate = pricesRes.value.find((r) => r.purpose === "ROADMAP_GENERATION");
+        const rate = pricesRes.value;
         if (rate) setCreditRate(rate.creditCost);
+        else setCreditError("Chưa có bảng giá khả dụng. Bạn có thể tạo lộ trình thủ công.");
+      } else {
+        setCreditError("Chưa thể kiểm tra chi phí AI. Bạn có thể tạo lộ trình thủ công.");
       }
       if (walletRes.status === "fulfilled") {
         setWallet(walletRes.value);
+      } else {
+        setCreditError("Chưa thể kiểm tra số dư Credit. Vui lòng thử lại hoặc tạo thủ công.");
       }
     });
     return () => {
@@ -212,7 +221,9 @@ export function RoadmapAiGenerationModal({
             <div className="flex items-center gap-2 font-medium text-slate-700">
               <Coins className="size-4 text-amber-500" />
               <span>Chi phí thao tác:</span>
-              <span className="font-bold text-slate-900">{creditRate} AI Credits</span>
+              <span className="font-bold text-slate-900">
+                {creditRate === null ? "Đang kiểm tra…" : `${creditRate} AI Credits`}
+              </span>
             </div>
             {wallet && (
               <div className="flex items-center gap-2 text-slate-600">
@@ -220,7 +231,9 @@ export function RoadmapAiGenerationModal({
                 <span>Số dư khả dụng:</span>
                 <span
                   className={`font-bold ${
-                    wallet.availableCredits < creditRate ? "text-rose-600" : "text-emerald-600"
+                    creditRate !== null && wallet.availableCredits < creditRate
+                      ? "text-rose-600"
+                      : "text-emerald-600"
                   }`}
                 >
                   {wallet.availableCredits} Credits
@@ -229,16 +242,23 @@ export function RoadmapAiGenerationModal({
             )}
           </div>
 
-          {wallet && wallet.availableCredits < creditRate && (
+          {creditError && (
+            <p role="alert" className="mt-3 text-sm text-amber-800">
+              {creditError}
+            </p>
+          )}
+          {wallet && creditRate !== null && wallet.availableCredits < creditRate && (
             <div className="mt-3.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-800">
               <div className="flex items-start gap-2.5">
                 <AlertCircle className="size-4 shrink-0 text-amber-600 mt-0.5" />
                 <div className="space-y-1">
                   <p className="font-semibold text-amber-900">
-                    Số dư AI Credit không đủ để thực hiện thao tác (Cần {creditRate} credit, khả dụng: {wallet.availableCredits} credit).
+                    Số dư AI Credit không đủ để thực hiện thao tác (Cần {creditRate} credit, khả
+                    dụng: {wallet.availableCredits} credit).
                   </p>
                   <p className="text-amber-700">
-                    Bạn có thể nạp thêm Credit vào ví hoặc tiếp tục bằng quy trình lập lộ trình thủ công hiện có.
+                    Bạn có thể nạp thêm Credit vào ví hoặc tiếp tục bằng quy trình lập lộ trình thủ
+                    công hiện có.
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-1.5">
                     <a
@@ -275,7 +295,13 @@ export function RoadmapAiGenerationModal({
             type="button"
             variant="success"
             loading={busy}
-            disabled={loadingMaterials || (wallet !== null && wallet.availableCredits < creditRate)}
+            disabled={
+              loadingMaterials ||
+              creditRate === null ||
+              wallet === null ||
+              !!creditError ||
+              wallet.availableCredits < creditRate
+            }
             onClick={submit}
           >
             <Sparkles className="size-4" />

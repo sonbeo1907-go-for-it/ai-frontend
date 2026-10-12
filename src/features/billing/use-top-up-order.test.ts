@@ -9,6 +9,7 @@ vi.mock("@/lib/api-client", async (importOriginal) => {
   return {
     ...actual,
     billingApi: {
+      getConfiguration: vi.fn(),
       getPackages: vi.fn(),
       createTopUpOrder: vi.fn(),
       getTopUpOrder: vi.fn(),
@@ -32,6 +33,11 @@ describe("useTopUpOrder", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+    vi.mocked(billingApi.getConfiguration).mockResolvedValue({
+      paymentsEnabled: true,
+      paymentProvider: "VNPAY",
+    });
   });
 
   it("fetches active packages on mount", async () => {
@@ -73,19 +79,14 @@ describe("useTopUpOrder", () => {
 
     const { result } = renderHook(() => useTopUpOrder());
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await waitFor(() => expect(result.current.loadingPackages).toBe(false));
 
     let created: TopUpOrderResponse | null = null;
     await act(async () => {
       created = await result.current.purchasePackage("pkg-1");
     });
 
-    expect(billingApi.createTopUpOrder).toHaveBeenCalledWith(
-      "pkg-1",
-      expect.any(String),
-    );
+    expect(billingApi.createTopUpOrder).toHaveBeenCalledWith("pkg-1", expect.any(String));
     expect(created).toEqual(mockOrder);
     expect(result.current.purchaseError).toBeNull();
   });
@@ -103,9 +104,7 @@ describe("useTopUpOrder", () => {
 
     const { result } = renderHook(() => useTopUpOrder());
 
-    await act(async () => {
-      await Promise.resolve();
-    });
+    await waitFor(() => expect(result.current.loadingPackages).toBe(false));
 
     let created: TopUpOrderResponse | null = null;
     await act(async () => {
@@ -113,8 +112,36 @@ describe("useTopUpOrder", () => {
     });
 
     expect(created).toBeNull();
-    expect(result.current.purchaseError).toContain(
-      "Cổng thanh toán hiện đang tạm thời gián đoạn.",
+    expect(result.current.purchaseError).toContain("Cổng thanh toán hiện đang tạm thời gián đoạn.");
+  });
+
+  it("reuses a purchase identity after a network failure", async () => {
+    vi.mocked(billingApi.getPackages).mockResolvedValue(mockPackages);
+    vi.mocked(billingApi.createTopUpOrder).mockRejectedValue(new Error("offline"));
+    const { result } = renderHook(() => useTopUpOrder());
+    await waitFor(() => expect(result.current.loadingPackages).toBe(false));
+    await act(async () => {
+      await result.current.purchasePackage("pkg-1");
+    });
+    await act(async () => {
+      await result.current.purchasePackage("pkg-1");
+    });
+    expect(vi.mocked(billingApi.createTopUpOrder).mock.calls[0][1]).toBe(
+      vi.mocked(billingApi.createTopUpOrder).mock.calls[1][1],
     );
+  });
+
+  it("does not submit a purchase while payments are disabled", async () => {
+    vi.mocked(billingApi.getPackages).mockResolvedValue(mockPackages);
+    vi.mocked(billingApi.getConfiguration).mockResolvedValue({
+      paymentsEnabled: false,
+      paymentProvider: "VNPAY",
+    });
+    const { result } = renderHook(() => useTopUpOrder());
+    await waitFor(() => expect(result.current.loadingPackages).toBe(false));
+    await act(async () => {
+      await result.current.purchasePackage("pkg-1");
+    });
+    expect(billingApi.createTopUpOrder).not.toHaveBeenCalled();
   });
 });

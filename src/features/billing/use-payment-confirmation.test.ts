@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePaymentConfirmation } from "./use-payment-confirmation";
 import { billingApi } from "@/lib/api-client";
@@ -85,6 +85,36 @@ describe("usePaymentConfirmation", () => {
 
     expect(result.current.status).toBe("FAILED");
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("ignores an old order response after changing the selected order", async () => {
+    let resolveOld!: (order: TopUpOrderResponse) => void;
+    const onSuccess = vi.fn();
+    vi.spyOn(billingApi, "getTopUpOrderByCode")
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ...mockOrder("PENDING"), orderCode: "NEW" });
+    const { result, rerender } = renderHook(
+      ({ code }) => usePaymentConfirmation({ orderCode: code, onSuccess }),
+      { initialProps: { code: "OLD" } },
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    rerender({ code: "NEW" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      resolveOld(mockOrder("PAID"));
+    });
+    expect(result.current.order?.orderCode).toBe("NEW");
+    expect(result.current.status).toBe("VERIFYING");
+    expect(onSuccess).not.toHaveBeenCalled();
   });
 
   it("reaches maxAttempts while PENDING and sets TIMEOUT (does NOT conclude failure)", async () => {

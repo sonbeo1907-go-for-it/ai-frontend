@@ -2,16 +2,25 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Activity, BarChart3, BookOpen, FileCode2, LogOut, ServerCog, ShieldCheck } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  FileCode2,
+  LogOut,
+  ServerCog,
+  ShieldCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/states";
 import { AiAnalyticsDashboard } from "@/features/admin/ai-analytics-dashboard";
 import { AiProviderDashboard } from "@/features/admin/ai-provider-dashboard";
 import { AiPromptDashboard } from "@/features/admin/ai-prompts";
 import { AiExecutionDashboard } from "@/features/admin/ai-executions";
+import { AdminBillingDashboard } from "@/features/admin/billing/admin-billing-dashboard";
 import { useAuth } from "@/features/auth/auth-context";
 
-type AdminTab = "providers" | "analytics" | "prompts" | "executions";
+type AdminTab = "providers" | "analytics" | "prompts" | "executions" | "billing";
 
 function AdminPageContent() {
   const router = useRouter();
@@ -20,7 +29,10 @@ function AdminPageContent() {
 
   const tabParam = searchParams.get("tab");
   const activeTab: AdminTab =
-    tabParam === "analytics" || tabParam === "prompts" || tabParam === "executions"
+    tabParam === "analytics" ||
+    tabParam === "prompts" ||
+    tabParam === "executions" ||
+    tabParam === "billing"
       ? tabParam
       : "providers";
 
@@ -77,7 +89,8 @@ function AdminPageContent() {
               Quản trị hệ thống AI
             </h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">
-              Quản lý provider, credential, model, system prompts, lịch sử thực thi và giám sát hiệu năng, độ trễ, token tiêu thụ.
+              Quản lý provider, credential, model, system prompts, lịch sử thực thi và giám sát hiệu
+              năng, độ trễ, token tiêu thụ.
             </p>
           </div>
 
@@ -85,7 +98,7 @@ function AdminPageContent() {
           <div
             role="tablist"
             aria-label="Khu vực quản trị"
-            className="inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm"
+            className="flex flex-wrap rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm"
           >
             <button
               type="button"
@@ -143,10 +156,25 @@ function AdminPageContent() {
               <BarChart3 className="size-4" />
               Chỉ số & Analytics
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "billing"}
+              onClick={() => handleTabChange("billing")}
+              className={`rounded-xl px-4 py-2 text-xs font-bold focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+                activeTab === "billing"
+                  ? "bg-slate-950 text-white"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Gói & giá Credit
+            </button>
           </div>
         </section>
 
-        {activeTab === "providers" ? (
+        {activeTab === "billing" ? (
+          <AdminBillingDashboard actorId={profile.id} />
+        ) : activeTab === "providers" ? (
           <AiProviderDashboard />
         ) : activeTab === "prompts" ? (
           <AiPromptDashboard />

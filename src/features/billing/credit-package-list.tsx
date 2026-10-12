@@ -6,6 +6,7 @@ import type { CreditPackageResponse } from "@/types/api";
 export interface CreditPackageListProps {
   packages: CreditPackageResponse[];
   loading?: boolean;
+  paymentsEnabled?: boolean;
   purchasingPackageId?: string | null;
   onSelectPackage: (packageId: string) => void;
   error?: string | null;
@@ -26,6 +27,7 @@ export function formatCredits(credits: number): string {
 export function CreditPackageList({
   packages,
   loading = false,
+  paymentsEnabled = true,
   purchasingPackageId = null,
   onSelectPackage,
   error = null,
@@ -133,7 +135,7 @@ export function CreditPackageList({
                 <button
                   type="button"
                   id={`btn-purchase-${pkg.packageCode}`}
-                  disabled={isPurchasing || purchasingPackageId !== null}
+                  disabled={!paymentsEnabled || isPurchasing || purchasingPackageId !== null}
                   onClick={() => onSelectPackage(pkg.id)}
                   className={`w-full py-2.5 px-4 rounded-xl font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2 ${
                     isPurchasing

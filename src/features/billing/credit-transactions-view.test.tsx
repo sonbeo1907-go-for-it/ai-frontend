@@ -62,7 +62,9 @@ describe("CreditTransactionsView", () => {
 
     // Check that RELEASE entry is clearly displayed
     expect(screen.getAllByText("Hoàn giữ chỗ").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Hoàn lại credit giữ chỗ do thao tác AI không thành công")).not.toBeNull();
+    expect(
+      screen.getByText("Hoàn lại credit giữ chỗ do thao tác AI không thành công"),
+    ).not.toBeNull();
     expect(screen.getByText("+10 Credit khả dụng")).not.toBeNull();
 
     // Check that RESERVE entry is displayed

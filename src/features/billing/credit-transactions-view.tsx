@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Clock,
-  Filter,
   Lock,
   RefreshCw,
   RotateCcw,
@@ -42,32 +41,46 @@ export function CreditTransactionsView() {
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(0);
+  const requestId = useRef(0);
 
   const loadData = useCallback(
     async (pageIndex: number) => {
+      const currentRequest = ++requestId.current;
       setLoading(true);
       setError(null);
+      if (fromDate && toDate && fromDate > toDate) {
+        setError("Ngày bắt đầu không được sau ngày kết thúc.");
+        setTransactions(null);
+        setLoading(false);
+        return;
+      }
       try {
         const res = await fetchCreditTransactions({
           type: typeFilter || undefined,
-          from: fromDate ? `${fromDate}T00:00:00Z` : undefined,
-          to: toDate ? `${toDate}T23:59:59Z` : undefined,
+          from: fromDate ? new Date(`${fromDate}T00:00:00`).toISOString() : undefined,
+          to: toDate ? new Date(`${toDate}T23:59:59.999`).toISOString() : undefined,
           page: pageIndex,
           size: 10,
         });
+        if (currentRequest !== requestId.current) return;
         setTransactions(res);
         setCurrentPage(pageIndex);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Không thể tải lịch sử giao dịch");
+      } catch {
+        if (currentRequest !== requestId.current) return;
+        setError("Không thể tải lịch sử giao dịch. Vui lòng thử làm mới.");
       } finally {
-        setLoading(false);
+        if (currentRequest === requestId.current) setLoading(false);
       }
     },
     [typeFilter, fromDate, toDate],
   );
 
   useEffect(() => {
-    void loadData(0);
+    const timer = setTimeout(() => void loadData(0), 0);
+    return () => {
+      clearTimeout(timer);
+      requestId.current += 1;
+    };
   }, [loadData]);
 
   const handleResetFilters = () => {
@@ -254,7 +267,9 @@ function TransactionRow({ tx }: { tx: CreditTransaction }) {
   return (
     <div className="flex flex-col gap-3 p-4 transition hover:bg-slate-50/50 sm:flex-row sm:items-center sm:justify-between sm:p-5">
       <div className="flex items-start gap-3.5 min-w-0">
-        <div className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl ${typeConfig.iconBg}`}>
+        <div
+          className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl ${typeConfig.iconBg}`}
+        >
           {typeConfig.icon}
         </div>
         <div className="min-w-0 space-y-1">
@@ -274,7 +289,13 @@ function TransactionRow({ tx }: { tx: CreditTransaction }) {
             )}
             <span>·</span>
             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 uppercase">
-              {tx.status}
+              {tx.entryType === "RESERVE"
+                ? "Đã ghi nhận giữ chỗ"
+                : tx.entryType === "USAGE"
+                  ? "Đã quyết toán"
+                  : tx.entryType === "RELEASE_RESERVE"
+                    ? "Đã hoàn giữ chỗ"
+                    : "Đã ghi nhận"}
             </span>
           </div>
         </div>
@@ -308,7 +329,8 @@ function TransactionRow({ tx }: { tx: CreditTransaction }) {
 
         {/* Snapshot Balance after transaction */}
         <span className="text-[11px] text-slate-400">
-          Số dư sau GD: <strong className="text-slate-600">{tx.availableBalanceAfter}</strong> khả dụng
+          Số dư sau GD: <strong className="text-slate-600">{tx.availableBalanceAfter}</strong> khả
+          dụng
           {tx.reservedBalanceAfter > 0 && ` (${tx.reservedBalanceAfter} giữ chỗ)`}
         </span>
       </div>

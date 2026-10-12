@@ -161,7 +161,6 @@ export const authApi = {
   },
 };
 
-
 const AI_PROVIDER_CONFIGS_PATH = "/api/v1/admin/ai-provider-configs";
 const AI_PROVIDERS_PATH = "/api/v1/admin/ai-providers";
 
@@ -284,7 +283,7 @@ export const aiAnalyticsApi = {
     if (to) params.set("to", to);
     const qs = params.toString();
     return apiRequest<AiExecutionAnalytics[]>(
-      qs ? `${AI_ANALYTICS_PATH}?${qs}` : AI_ANALYTICS_PATH
+      qs ? `${AI_ANALYTICS_PATH}?${qs}` : AI_ANALYTICS_PATH,
     );
   },
 };
@@ -327,10 +326,9 @@ export const aiPromptApi = {
       { method: "POST" },
     ),
   archive: (promptId: string, version: number) =>
-    apiRequest<void>(
-      `${promptPath(promptId)}?version=${encodeURIComponent(version)}`,
-      { method: "DELETE" },
-    ),
+    apiRequest<void>(`${promptPath(promptId)}?version=${encodeURIComponent(version)}`, {
+      method: "DELETE",
+    }),
   preview: (input: AiPromptPreviewRequest) =>
     apiRequest<AiPromptPreviewResponse>(`${ADMIN_AI_PROMPTS_PATH}/preview`, {
       method: "POST",
@@ -374,9 +372,20 @@ export const BILLING_PACKAGES_PATH = "/api/v1/billing/packages";
 export const BILLING_TOP_UP_ORDERS_PATH = "/api/v1/billing/top-up-orders";
 
 export const billingApi = {
+  getAiPriceQuote: (purpose: AiPurpose) =>
+    apiRequest<{
+      rateId: string;
+      providerConfigId: string;
+      purpose: AiPurpose;
+      modelCategory: string | null;
+      creditCost: number;
+    }>(`/api/v1/billing/ai-prices/quote?${new URLSearchParams({ purpose })}`),
+  getConfiguration: () =>
+    apiRequest<{ paymentsEnabled: boolean; paymentProvider: string }>(
+      "/api/v1/billing/configuration",
+    ),
   getWallet: () => apiRequest<CreditWalletResponse>("/api/v1/billing/wallet"),
-  getPackages: () =>
-    apiRequest<CreditPackageResponse[]>(BILLING_PACKAGES_PATH),
+  getPackages: () => apiRequest<CreditPackageResponse[]>(BILLING_PACKAGES_PATH),
   createTopUpOrder: (packageId: string, idempotencyKey: string) =>
     apiRequest<TopUpOrderResponse>(BILLING_TOP_UP_ORDERS_PATH, {
       method: "POST",
@@ -385,13 +394,14 @@ export const billingApi = {
       },
       body: JSON.stringify({ packageId }),
     }),
-  getTopUpOrder: (orderId: string) =>
-    apiRequest<TopUpOrderResponse>(
-      `${BILLING_TOP_UP_ORDERS_PATH}/${encodeURIComponent(orderId)}`,
-    ),
-  getTopUpOrderByCode: (orderCode: string) =>
+  getTopUpOrder: (orderId: string, signal?: AbortSignal) =>
+    apiRequest<TopUpOrderResponse>(`${BILLING_TOP_UP_ORDERS_PATH}/${encodeURIComponent(orderId)}`, {
+      signal,
+    }),
+  getTopUpOrderByCode: (orderCode: string, signal?: AbortSignal) =>
     apiRequest<TopUpOrderResponse>(
       `${BILLING_TOP_UP_ORDERS_PATH}/by-code/${encodeURIComponent(orderCode)}`,
+      { signal },
     ),
   getAiPrices: () => apiRequest<AiCreditRate[]>("/api/v1/billing/ai-prices"),
   getTransactions: (params?: TransactionFilterParams) => {
@@ -407,7 +417,6 @@ export const billingApi = {
     );
   },
 };
-
 
 export function getErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) {

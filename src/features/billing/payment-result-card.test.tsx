@@ -93,7 +93,7 @@ describe("PaymentResultCard", () => {
     expect(screen.getByTestId("payment-failure")).not.toBeNull();
     expect(screen.getByText("Thanh toán không thành công")).not.toBeNull();
     expect(screen.getByText("Cổng thanh toán báo giao dịch không thành công.")).not.toBeNull();
-    const link = screen.getByRole("link", { name: "Chọn gói nạp khác" });
+    const link = screen.getByRole("link", { name: "Về trang Ví Credit" });
     expect(link.getAttribute("href")).toBe("/billing");
   });
 });

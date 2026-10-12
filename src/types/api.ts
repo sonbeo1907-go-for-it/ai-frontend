@@ -505,6 +505,7 @@ export interface DailyPlanSummary {
 }
 
 export interface AiProviderConfig {
+  pricingCategory?: string | null;
   id: string;
   version: number;
   providerId: string;
@@ -525,6 +526,7 @@ export interface AiProviderConfig {
 }
 
 export interface CreateAiProviderConfigInput {
+  pricingCategory?: string | null;
   providerId: string;
   purpose: AiPurpose;
   model: string;
@@ -537,6 +539,7 @@ export interface CreateAiProviderConfigInput {
 }
 
 export interface UpdateAiProviderConfigInput {
+  pricingCategory?: string | null;
   version: number;
   model: string;
   timeoutSeconds: number;

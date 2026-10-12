@@ -35,12 +35,7 @@ describe("CreditPackageList", () => {
 
   it("renders packages with price, base, bonus and total credits", () => {
     const handleSelect = vi.fn();
-    render(
-      <CreditPackageList
-        packages={mockPackages}
-        onSelectPackage={handleSelect}
-      />,
-    );
+    render(<CreditPackageList packages={mockPackages} onSelectPackage={handleSelect} />);
 
     expect(screen.getByText("Gói Khởi Đầu")).toBeTruthy();
     expect(screen.getByText("Gói Chuyên Nghiệp")).toBeTruthy();
@@ -50,12 +45,7 @@ describe("CreditPackageList", () => {
 
   it("calls onSelectPackage when Mua ngay button is clicked", () => {
     const handleSelect = vi.fn();
-    render(
-      <CreditPackageList
-        packages={mockPackages}
-        onSelectPackage={handleSelect}
-      />,
-    );
+    render(<CreditPackageList packages={mockPackages} onSelectPackage={handleSelect} />);
 
     const buttons = screen.getAllByRole("button", { name: "Mua ngay" });
     fireEvent.click(buttons[0]);

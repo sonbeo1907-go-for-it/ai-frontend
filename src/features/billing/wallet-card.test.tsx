@@ -26,9 +26,7 @@ describe("WalletCard Component (US-PAY-01)", () => {
       expect(screen.getByText("0")).not.toBeNull();
     });
 
-    expect(
-      screen.getByText("Nguyên tắc học tập không gián đoạn"),
-    ).not.toBeNull();
+    expect(screen.getByText("Nguyên tắc học tập không gián đoạn")).not.toBeNull();
   });
 
   it("handles zero credit and assures user about manual learning", async () => {
@@ -45,30 +43,26 @@ describe("WalletCard Component (US-PAY-01)", () => {
       expect(zeros.length).toBeGreaterThanOrEqual(2);
     });
 
-    expect(
-      screen.getByText(/Ngay cả khi số dư Credit bằng 0/i),
-    ).not.toBeNull();
+    expect(screen.getByText(/Ngay cả khi số dư Credit bằng 0/i)).not.toBeNull();
   });
 
   it("refreshes wallet when clicking refresh button", async () => {
     let callCount = 0;
-    const getWalletSpy = vi
-      .spyOn(billingApi, "getWallet")
-      .mockImplementation(async () => {
-        callCount++;
-        if (callCount === 1) {
-          return {
-            id: "wallet-uuid-1",
-            availableCredits: 1000,
-            reservedCredits: 0,
-          };
-        }
+    const getWalletSpy = vi.spyOn(billingApi, "getWallet").mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
         return {
           id: "wallet-uuid-1",
-          availableCredits: 1500,
-          reservedCredits: 200,
+          availableCredits: 1000,
+          reservedCredits: 0,
         };
-      });
+      }
+      return {
+        id: "wallet-uuid-1",
+        availableCredits: 1500,
+        reservedCredits: 200,
+      };
+    });
 
     render(<WalletCard />);
 

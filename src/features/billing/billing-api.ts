@@ -4,7 +4,6 @@ import type {
   AiCreditRate,
   CreditTransaction,
   TransactionFilterParams,
-  PageResponse,
 } from "@/types/api";
 
 export type {
