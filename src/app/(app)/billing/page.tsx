@@ -24,18 +24,19 @@ export default function BillingPage() {
       <WalletCard />
 
       <div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
           Mua gói AI Credit
         </h2>
-        <p className="mt-2 text-slate-600 dark:text-slate-400 max-w-2xl text-sm sm:text-base">
+        <p className="mt-2 text-slate-600 max-w-2xl text-sm sm:text-base">
           Trang bị AI Credit để trải nghiệm tạo lộ trình học tập tự động, sinh kế hoạch mỗi ngày và
           nhận gợi ý thông minh từ AI.
         </p>
       </div>
 
-      <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/40 text-blue-800 dark:text-blue-300 text-xs sm:text-sm flex items-start gap-3">
+      <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-sm leading-6 flex items-start gap-3">
         <svg
-          className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5"
+          className="h-5 w-5 text-blue-700 shrink-0 mt-0.5"
+          aria-hidden="true"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -57,9 +58,9 @@ export default function BillingPage() {
       {packageError ? (
         <div
           role="alert"
-          className="p-6 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-center space-y-3"
+          className="p-6 rounded-2xl bg-red-50 border border-red-200 text-center space-y-3"
         >
-          <p className="text-red-700 dark:text-red-300 font-medium">{packageError}</p>
+          <p className="text-red-700 font-medium">{packageError}</p>
         </div>
       ) : (
         <>
@@ -88,7 +89,7 @@ export default function BillingPage() {
       )}
 
       {/* Credit Transaction History */}
-      <div className="pt-6 border-t border-slate-200 dark:border-slate-800">
+      <div className="pt-6 border-t border-slate-200">
         <CreditTransactionsView />
       </div>
     </div>

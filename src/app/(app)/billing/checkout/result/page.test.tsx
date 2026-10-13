@@ -15,7 +15,7 @@ describe("CheckoutResultPage", () => {
 
   it("extracts vnp_TxnRef from search params and delegates to usePaymentConfirmation", () => {
     const mockParams = new URLSearchParams({ vnp_TxnRef: "ORD-999-TEST" });
-    vi.mocked(useSearchParams).mockReturnValue(mockParams as any);
+    vi.mocked(useSearchParams).mockReturnValue(mockParams as ReturnType<typeof useSearchParams>);
 
     const useConfirmationSpy = vi.spyOn(confirmationHook, "usePaymentConfirmation").mockReturnValue({
       order: {

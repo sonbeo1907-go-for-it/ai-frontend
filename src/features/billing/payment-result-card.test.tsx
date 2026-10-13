@@ -21,6 +21,32 @@ describe("PaymentResultCard", () => {
     createdAt: new Date().toISOString(),
   };
 
+  it.each(["VERIFYING", "SUCCESS", "TIMEOUT", "FAILED", "CANCELLED", "EXPIRED"] as const)(
+    "keeps the %s checkout state readable in the app's light theme",
+    (status) => {
+      const { container } = render(
+        <PaymentResultCard
+          order={{
+            ...mockOrder,
+            status:
+              status === "SUCCESS"
+                ? "PAID"
+                : status === "VERIFYING" || status === "TIMEOUT"
+                  ? "PENDING"
+                  : status,
+          }}
+          status={status}
+          isLoading={false}
+          error={null}
+          onRetry={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole("heading").classList.contains("text-slate-900")).toBe(true);
+      expect(container.querySelector('[class*="dark:"]')).toBeNull();
+    },
+  );
+
   it("renders VERIFYING state with waiting indicator and order details", () => {
     render(
       <PaymentResultCard

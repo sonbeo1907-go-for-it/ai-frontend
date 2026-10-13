@@ -43,6 +43,30 @@ describe("CreditPackageList", () => {
     expect(screen.getByText(/11\.000/)).toBeTruthy();
   });
 
+  it("keeps package surfaces and headings in the app's light theme", () => {
+    const { container } = render(
+      <CreditPackageList packages={mockPackages} onSelectPackage={vi.fn()} />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Gói Khởi Đầu" }).classList.contains("text-slate-900"),
+    ).toBe(true);
+    expect(screen.getByTestId("package-card-AI_STARTER_50K").classList.contains("bg-white")).toBe(
+      true,
+    );
+    expect(container.querySelector('[class*="dark:"]')).toBeNull();
+  });
+
+  it("keeps loading and empty states in the same light theme", () => {
+    const { container, rerender } = render(
+      <CreditPackageList packages={[]} loading onSelectPackage={vi.fn()} />,
+    );
+    expect(container.querySelector('[class*="dark:"]')).toBeNull();
+
+    rerender(<CreditPackageList packages={[]} onSelectPackage={vi.fn()} />);
+    expect(container.querySelector('[class*="dark:"]')).toBeNull();
+  });
+
   it("calls onSelectPackage when Mua ngay button is clicked", () => {
     const handleSelect = vi.fn();
     render(<CreditPackageList packages={mockPackages} onSelectPackage={handleSelect} />);

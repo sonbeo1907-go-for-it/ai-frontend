@@ -28,6 +28,13 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Sprint 5 payment sandbox
+
+Follow [the frontend VNPay sandbox runbook](docs/vnpay-sandbox.md).
+The blank `.env.sandbox.example` is copied/merged into `.env.local`, which Next.js loads.
+Run `npm run dev:sandbox` for the fixed localhost port 3000. VNPay credentials stay in
+the backend; its configuration endpoint controls whether purchases are enabled.
+
 ## Code quality commands
 
 ```bash
