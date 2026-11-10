@@ -1,0 +1,431 @@
+import type {
+  AdminAiExecutionDetail,
+  AdminAiExecutionFilterParams,
+  AdminAiExecutionSummary,
+  AiExecutionAnalytics,
+  AiPromptDefaultResponse,
+  AiPromptPreviewRequest,
+  AiPromptPreviewResponse,
+  AiPromptResponse,
+  AiProvider,
+  AiProviderConfig,
+  AiProviderCredential,
+  AiProviderConnectionTestResult,
+  AiPurpose,
+  ApiErrorBody,
+  ApiResponse,
+  CreateAiPromptDraftRequest,
+  CreateAiProviderCredentialInput,
+  CreateAiProviderConfigInput,
+  CreateAiProviderInput,
+  CreditWalletResponse,
+  AiCreditRate,
+  CreditTransaction,
+  TransactionFilterParams,
+  PageResponse,
+  ProfileResponse,
+  TokenResponse,
+  CreditPackageResponse,
+  TopUpOrderResponse,
+  UpdateAiPromptDraftRequest,
+  UpdateAiProviderCredentialInput,
+  UpdateAiProviderConfigInput,
+  UpdateAiProviderInput,
+} from "@/types/api";
+
+let accessToken: string | null = null;
+let refreshPromise: Promise<TokenResponse> | null = null;
+let authenticationExpiryNotified = false;
+
+export const AUTHENTICATION_EXPIRED_EVENT = "authentication-expired";
+const AUTHENTICATION_EXPIRED_NOTICE_KEY = "authentication-expired-notice";
+
+export class ApiClientError extends Error {
+  constructor(public readonly details: ApiErrorBody) {
+    super(details.message);
+    this.name = "ApiClientError";
+  }
+}
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+  if (token) authenticationExpiryNotified = false;
+}
+
+function notifyAuthenticationExpired() {
+  if (typeof window === "undefined" || authenticationExpiryNotified) return;
+  authenticationExpiryNotified = true;
+  window.sessionStorage.setItem(AUTHENTICATION_EXPIRED_NOTICE_KEY, "true");
+  window.dispatchEvent(new Event(AUTHENTICATION_EXPIRED_EVENT));
+}
+
+export function consumeAuthenticationExpiredNotice() {
+  if (typeof window === "undefined") return false;
+  const expired = window.sessionStorage.getItem(AUTHENTICATION_EXPIRED_NOTICE_KEY) === "true";
+  if (expired) window.sessionStorage.removeItem(AUTHENTICATION_EXPIRED_NOTICE_KEY);
+  return expired;
+}
+
+async function parseError(response: Response): Promise<ApiErrorBody> {
+  try {
+    const body = (await response.json()) as Partial<ApiErrorBody>;
+    return {
+      status: response.status,
+      code: body.code ?? "REQUEST_FAILED",
+      message: body.message ?? "Yêu cầu không thể hoàn tất.",
+      ...body,
+    } as ApiErrorBody;
+  } catch {
+    return {
+      status: response.status,
+      code: "REQUEST_FAILED",
+      message: "Không thể kết nối tới máy chủ.",
+    };
+  }
+}
+async function refreshAccessToken(): Promise<TokenResponse> {
+  if (!refreshPromise) {
+    refreshPromise = fetch("/api/v1/auth/refresh", { method: "POST", credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) throw new ApiClientError(await parseError(response));
+        const payload = (await response.json()) as ApiResponse<TokenResponse>;
+        setAccessToken(payload.data.accessToken);
+        return payload.data;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+export async function apiRequest<T>(
+  path: string,
+  init: RequestInit = {},
+  retry = true,
+): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
+  const response = await fetch(path, {
+    ...init,
+    headers,
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (response.status === 401 && retry && !path.includes("/auth/")) {
+    try {
+      await refreshAccessToken();
+      return apiRequest<T>(path, init, false);
+    } catch {
+      setAccessToken(null);
+      notifyAuthenticationExpired();
+    }
+  }
+  if (response.status === 401 && !retry && !path.includes("/auth/")) {
+    setAccessToken(null);
+    notifyAuthenticationExpired();
+  }
+  if (!response.ok) throw new ApiClientError(await parseError(response));
+  if (response.status === 204) return undefined as T;
+  const body = await response.text();
+  if (!body) return undefined as T;
+  const payload = JSON.parse(body) as ApiResponse<T>;
+  return payload.data;
+}
+export const authApi = {
+  login: (email: string, password: string) =>
+    apiRequest<TokenResponse>(
+      "/api/v1/auth/login",
+      { method: "POST", body: JSON.stringify({ email, password }) },
+      false,
+    ),
+  google: (idToken: string) =>
+    apiRequest<TokenResponse>(
+      "/api/v1/auth/google",
+      { method: "POST", body: JSON.stringify({ idToken }) },
+      false,
+    ),
+  register: (email: string, password: string, displayName: string) =>
+    apiRequest<void>(
+      "/api/v1/auth/register",
+      { method: "POST", body: JSON.stringify({ email, password, displayName }) },
+      false,
+    ),
+  refresh: refreshAccessToken,
+  profile: () => apiRequest<ProfileResponse>("/api/v1/profile"),
+  logout: async () => {
+    const headers = new Headers();
+    if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+    await fetch("/api/v1/auth/logout", { method: "POST", headers, credentials: "include" });
+    setAccessToken(null);
+  },
+};
+
+const AI_PROVIDER_CONFIGS_PATH = "/api/v1/admin/ai-provider-configs";
+const AI_PROVIDERS_PATH = "/api/v1/admin/ai-providers";
+
+function configPath(configId: string) {
+  return `${AI_PROVIDER_CONFIGS_PATH}/${configId}`;
+}
+
+function providerPath(providerId: string) {
+  return `${AI_PROVIDERS_PATH}/${providerId}`;
+}
+
+function credentialPath(providerId: string, credentialId: string) {
+  return `${providerPath(providerId)}/credentials/${credentialId}`;
+}
+
+export const aiProviderApi = {
+  list: () => apiRequest<AiProvider[]>(AI_PROVIDERS_PATH),
+  get: (providerId: string) => apiRequest<AiProvider>(providerPath(providerId)),
+  create: (input: CreateAiProviderInput) =>
+    apiRequest<AiProvider>(AI_PROVIDERS_PATH, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (providerId: string, input: UpdateAiProviderInput) =>
+    apiRequest<AiProvider>(providerPath(providerId), {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  enable: (providerId: string, version: number) =>
+    apiRequest<AiProvider>(`${providerPath(providerId)}/enable`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+  disable: (providerId: string, version: number) =>
+    apiRequest<AiProvider>(`${providerPath(providerId)}/disable`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+  archive: (providerId: string, version: number) =>
+    apiRequest<void>(`${providerPath(providerId)}?version=${encodeURIComponent(version)}`, {
+      method: "DELETE",
+    }),
+  listCredentials: (providerId: string) =>
+    apiRequest<AiProviderCredential[]>(`${providerPath(providerId)}/credentials`),
+  createCredential: (providerId: string, input: CreateAiProviderCredentialInput) =>
+    apiRequest<AiProviderCredential>(`${providerPath(providerId)}/credentials`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateCredential: (
+    providerId: string,
+    credentialId: string,
+    input: UpdateAiProviderCredentialInput,
+  ) =>
+    apiRequest<AiProviderCredential>(credentialPath(providerId, credentialId), {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  enableCredential: (providerId: string, credentialId: string, version: number) =>
+    apiRequest<AiProviderCredential>(`${credentialPath(providerId, credentialId)}/enable`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+  disableCredential: (providerId: string, credentialId: string, version: number) =>
+    apiRequest<AiProviderCredential>(`${credentialPath(providerId, credentialId)}/disable`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+  archiveCredential: (providerId: string, credentialId: string, version: number) =>
+    apiRequest<void>(
+      `${credentialPath(providerId, credentialId)}?version=${encodeURIComponent(version)}`,
+      { method: "DELETE" },
+    ),
+};
+
+export const aiProviderConfigApi = {
+  list: () => apiRequest<AiProviderConfig[]>(AI_PROVIDER_CONFIGS_PATH),
+  get: (configId: string) => apiRequest<AiProviderConfig>(configPath(configId)),
+  create: (input: CreateAiProviderConfigInput) =>
+    apiRequest<AiProviderConfig>(AI_PROVIDER_CONFIGS_PATH, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  update: (configId: string, input: UpdateAiProviderConfigInput) =>
+    apiRequest<AiProviderConfig>(configPath(configId), {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  enable: (configId: string, version: number) =>
+    apiRequest<AiProviderConfig>(`${configPath(configId)}/enable`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+  disable: (configId: string, version: number) =>
+    apiRequest<AiProviderConfig>(`${configPath(configId)}/disable`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+  makeDefault: (configId: string, version: number) =>
+    apiRequest<AiProviderConfig>(`${configPath(configId)}/default`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+  testConnection: (configId: string) =>
+    apiRequest<AiProviderConnectionTestResult>(`${configPath(configId)}/test-connection`, {
+      method: "POST",
+    }),
+  archive: (configId: string, version: number) =>
+    apiRequest<void>(`${configPath(configId)}?version=${encodeURIComponent(version)}`, {
+      method: "DELETE",
+    }),
+};
+
+export const AI_ANALYTICS_PATH = "/api/v1/admin/ai-analytics";
+
+export const aiAnalyticsApi = {
+  getMetrics: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return apiRequest<AiExecutionAnalytics[]>(
+      qs ? `${AI_ANALYTICS_PATH}?${qs}` : AI_ANALYTICS_PATH,
+    );
+  },
+};
+
+export const ADMIN_AI_PROMPTS_PATH = "/api/v1/admin/ai-prompts";
+
+function promptPath(promptId: string) {
+  return `${ADMIN_AI_PROMPTS_PATH}/${promptId}`;
+}
+
+export const aiPromptApi = {
+  listByPurpose: (purpose: AiPurpose) =>
+    apiRequest<AiPromptResponse[]>(
+      `${ADMIN_AI_PROMPTS_PATH}?purpose=${encodeURIComponent(purpose)}`,
+    ),
+  getById: (promptId: string) => apiRequest<AiPromptResponse>(promptPath(promptId)),
+  createDraft: (input: CreateAiPromptDraftRequest) =>
+    apiRequest<AiPromptResponse>(ADMIN_AI_PROMPTS_PATH, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateDraft: (promptId: string, input: UpdateAiPromptDraftRequest) =>
+    apiRequest<AiPromptResponse>(promptPath(promptId), {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  publish: (promptId: string, version: number) =>
+    apiRequest<AiPromptResponse>(
+      `${promptPath(promptId)}/publish?version=${encodeURIComponent(version)}`,
+      { method: "POST" },
+    ),
+  activate: (promptId: string, version: number) =>
+    apiRequest<AiPromptResponse>(
+      `${promptPath(promptId)}/activate?version=${encodeURIComponent(version)}`,
+      { method: "POST" },
+    ),
+  rollback: (promptId: string, version: number) =>
+    apiRequest<AiPromptResponse>(
+      `${promptPath(promptId)}/rollback?version=${encodeURIComponent(version)}`,
+      { method: "POST" },
+    ),
+  archive: (promptId: string, version: number) =>
+    apiRequest<void>(`${promptPath(promptId)}?version=${encodeURIComponent(version)}`, {
+      method: "DELETE",
+    }),
+  preview: (input: AiPromptPreviewRequest) =>
+    apiRequest<AiPromptPreviewResponse>(`${ADMIN_AI_PROMPTS_PATH}/preview`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  getDefault: (purpose: AiPurpose) =>
+    apiRequest<AiPromptDefaultResponse>(
+      `${ADMIN_AI_PROMPTS_PATH}/default?purpose=${encodeURIComponent(purpose)}`,
+    ),
+};
+
+export const ADMIN_AI_EXECUTIONS_PATH = "/api/v1/admin/ai-executions";
+
+export const adminAiExecutionApi = {
+  listExecutions: (params: AdminAiExecutionFilterParams = {}) => {
+    const search = new URLSearchParams();
+    if (params.from) search.set("from", params.from);
+    if (params.to) search.set("to", params.to);
+    if (params.providerId) search.set("providerId", params.providerId);
+    if (params.model) search.set("model", params.model);
+    if (params.purpose) search.set("purpose", params.purpose);
+    if (params.operation) search.set("operation", params.operation);
+    if (params.status) search.set("status", params.status);
+    if (params.failureCode) search.set("failureCode", params.failureCode);
+    if (params.page !== undefined) search.set("page", String(params.page));
+    if (params.size !== undefined) search.set("size", String(params.size));
+    if (params.sort) search.set("sort", params.sort);
+
+    const query = search.toString();
+    return apiRequest<PageResponse<AdminAiExecutionSummary>>(
+      query ? `${ADMIN_AI_EXECUTIONS_PATH}?${query}` : ADMIN_AI_EXECUTIONS_PATH,
+    );
+  },
+  getExecutionDetail: (executionId: string) =>
+    apiRequest<AdminAiExecutionDetail>(
+      `${ADMIN_AI_EXECUTIONS_PATH}/${encodeURIComponent(executionId)}`,
+    ),
+};
+
+export const BILLING_PACKAGES_PATH = "/api/v1/billing/packages";
+export const BILLING_TOP_UP_ORDERS_PATH = "/api/v1/billing/top-up-orders";
+
+export const billingApi = {
+  getAiPriceQuote: (purpose: AiPurpose) =>
+    apiRequest<{
+      rateId: string;
+      providerConfigId: string;
+      purpose: AiPurpose;
+      modelCategory: string | null;
+      creditCost: number;
+    }>(`/api/v1/billing/ai-prices/quote?${new URLSearchParams({ purpose })}`),
+  getConfiguration: () =>
+    apiRequest<{ paymentsEnabled: boolean; paymentProvider: string }>(
+      "/api/v1/billing/configuration",
+    ),
+  getWallet: () => apiRequest<CreditWalletResponse>("/api/v1/billing/wallet"),
+  getPackages: () => apiRequest<CreditPackageResponse[]>(BILLING_PACKAGES_PATH),
+  createTopUpOrder: (packageId: string, idempotencyKey: string) =>
+    apiRequest<TopUpOrderResponse>(BILLING_TOP_UP_ORDERS_PATH, {
+      method: "POST",
+      headers: {
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify({ packageId }),
+    }),
+  getTopUpOrder: (orderId: string, signal?: AbortSignal) =>
+    apiRequest<TopUpOrderResponse>(`${BILLING_TOP_UP_ORDERS_PATH}/${encodeURIComponent(orderId)}`, {
+      signal,
+    }),
+  getTopUpOrderByCode: (orderCode: string, signal?: AbortSignal) =>
+    apiRequest<TopUpOrderResponse>(
+      `${BILLING_TOP_UP_ORDERS_PATH}/by-code/${encodeURIComponent(orderCode)}`,
+      { signal },
+    ),
+  getAiPrices: () => apiRequest<AiCreditRate[]>("/api/v1/billing/ai-prices"),
+  getTransactions: (params?: TransactionFilterParams) => {
+    const search = new URLSearchParams();
+    if (params?.type) search.set("entryType", params.type);
+    if (params?.from) search.set("fromDate", params.from);
+    if (params?.to) search.set("toDate", params.to);
+    if (params?.page !== undefined) search.set("page", String(params.page));
+    if (params?.size !== undefined) search.set("size", String(params.size));
+    const query = search.toString();
+    return apiRequest<PageResponse<CreditTransaction>>(
+      query ? `/api/v1/billing/transactions?${query}` : "/api/v1/billing/transactions",
+    );
+  },
+};
+
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    const first = error.details.violations?.[0];
+    return first ? `${first.field}: ${first.message}` : error.message;
+  }
+  return error instanceof Error ? error.message : "Đã có lỗi xảy ra. Vui lòng thử lại.";
+}
+
+export function isApiErrorCode(error: unknown, code: string): boolean {
+  return error instanceof ApiClientError && error.details.code === code;
+}
